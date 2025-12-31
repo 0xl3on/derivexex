@@ -9,11 +9,24 @@ use reth::primitives::EthPrimitives;
 use reth::rpc::types::TransactionTrait;
 use reth_exex::{ExExContext, ExExEvent, ExExNotification};
 use reth_node_ethereum::EthereumNode;
-use reth_tracing::tracing::{info, warn};
+use reth_tracing::tracing;
 use serde::{Deserialize, Serialize};
 
 pub const BATCH_INBOX: Address = address!("Ff00000000000000000000000000000000000130");
 pub const BATCHER: Address = address!("2F60A5184c63ca94f82a27100643DbAbe4F3f7Fd");
+
+struct Deriver<Node: FullNodeComponents> {
+    exex_ctx: ExExContext<Node>,
+    expected_batcher: Address,
+    tracker: UnichainBatchTracker,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct UnichainBatchTracker {
+    pub batches_processed: u64,
+    pub total_blobs: u64,
+    pub batches: Vec<BatchTransaction>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct BatchTransaction {
@@ -27,22 +40,17 @@ pub struct BatchTransaction {
     pub blob_hashes: Vec<B256>,
 }
 
-#[derive(Debug, Default)]
-pub struct UnichainBatchTracker {
-    pub batches_processed: u64,
-    pub total_blobs: u64,
-    pub batches: Vec<BatchTransaction>,
-}
-
 impl UnichainBatchTracker {
     pub fn new() -> Self {
         Self::default()
     }
 
     pub fn log_stats(&self) {
-        info!(
-            "{} batch txs, {} blobs total",
-            self.batches_processed, self.total_blobs
+        tracing::info!(
+            target: "unichain::tracker",
+            batches = %self.batches_processed,
+            blobs = %self.total_blobs,
+            "stats"
         );
     }
 }
@@ -57,7 +65,7 @@ where
 pub(crate) async fn unichain_batch_exex<Node>(
     mut ctx: ExExContext<Node>,
     expected_batcher: Address,
-) -> Result<()>
+) -> eyre::Result<()>
 where
     Node: FullNodeComponents<Types: NodeTypes<Primitives = EthPrimitives>>,
 {
@@ -67,7 +75,7 @@ where
     while let Some(notification) = ctx.notifications.try_next().await? {
         match &notification {
             ExExNotification::ChainCommitted { new } => {
-                info!(committed_chain = ?new.range(), "Received commit");
+                tracing::debug!(target: "unichain::exex", chain = ?new.range(), "chain committed");
                 blocks_processed += new.blocks().len() as u64;
 
                 for block in new.blocks_iter() {
@@ -89,12 +97,14 @@ where
                         let blob_count = blob_hashes.len();
 
                         if from_address != expected_batcher {
-                            warn!(
-                                "Wrong sender: {} (expected {})",
-                                from_address, expected_batcher
+                            tracing::warn!(
+                                target: "unichain::exex",
+                                sender = %from_address,
+                                expected = %expected_batcher,
+                                "unexpected batcher"
                             );
                         } else {
-                            info!("Valid batch: {}", from_address);
+                            tracing::debug!(target: "unichain::exex", sender = %from_address, "valid batch");
                         }
                         tracker.batches_processed += 1;
                         tracker.total_blobs += blob_count as u64;
@@ -116,14 +126,15 @@ where
                 }
             }
             ExExNotification::ChainReorged { old, new } => {
-                info!(
-                    from_chain = ?old.range(),
-                    to_chain = ?new.range(),
-                    "Received reorg"
+                tracing::debug!(
+                    target: "unichain::exex",
+                    from = ?old.range(),
+                    to = ?new.range(),
+                    "chain reorged"
                 );
             }
             ExExNotification::ChainReverted { old } => {
-                info!(reverted_chain = ?old.range(), "Received revert");
+                tracing::debug!(target: "unichain::exex", chain = ?old.range(), "chain reverted");
             }
         }
 
@@ -133,7 +144,7 @@ where
         }
     }
 
-    info!("shutting down!");
+    tracing::info!(target: "unichain::exex", "shutting down");
     tracker.log_stats();
 
     Ok(())
@@ -143,7 +154,7 @@ fn main() -> Result<()> {
     reth::cli::Cli::parse_args().run(|builder, _args| async move {
         let handle = builder
             .node(EthereumNode::default())
-            .install_exex("unichain-batch-exex", |ctx| async move { init(ctx).await })
+            .install_exex("derivexex", |ctx| async move { init(ctx).await })
             .launch()
             .await?;
 
