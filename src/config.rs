@@ -14,7 +14,7 @@ pub struct UnichainConfig {
     pub l2_chain_id: u64,
     pub beacon_url: String,
     pub beacon_genesis_time: u64,
-    pub seconds_per_slot: u64,
+    pub l1_seconds_per_slot: u64,
 }
 
 impl UnichainConfig {
@@ -34,12 +34,12 @@ impl UnichainConfig {
             l2_chain_id: L2_CHAIN_ID,
             beacon_url,
             beacon_genesis_time: genesis.data.genesis_time,
-            seconds_per_slot: spec.data.seconds_per_slot,
+            l1_seconds_per_slot: spec.data.seconds_per_slot,
         })
     }
 
     #[inline]
     pub fn timestamp_to_slot(&self, timestamp: u64) -> u64 {
-        (timestamp.saturating_sub(self.beacon_genesis_time)) / self.seconds_per_slot
+        (timestamp.saturating_sub(self.beacon_genesis_time)) / self.l1_seconds_per_slot
     }
 }

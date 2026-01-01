@@ -29,6 +29,7 @@ struct UnichainBatchTracker {
 struct BatchTransaction {
     pub tx_hash: B256,
     pub block_number: u64,
+    pub block_timestamp: u64,
     pub block_hash: B256,
     pub from: Address,
     pub to: Address,
@@ -72,7 +73,7 @@ where
 {
     let expected_batcher = config.batcher;
     let batch_inbox = config.batch_inbox;
-    let _pipeline = DerivationPipeline::new(config);
+    let _pipeline = DerivationPipeline::new(config.clone());
     let mut tracker = UnichainBatchTracker::new();
     let mut blocks_processed: u64 = 0;
 
@@ -86,6 +87,7 @@ where
                     .blocks_iter()
                     .flat_map(|block| {
                         let block_number = block.number();
+                        let block_timestamp = block.timestamp();
                         let block_hash = block.hash();
 
                         block.transactions_with_sender().filter_map(move |(sender, tx)| {
@@ -101,6 +103,7 @@ where
                             Some(BatchTransaction {
                                 tx_hash: *tx.tx_hash(),
                                 block_number,
+                                block_timestamp,
                                 block_hash,
                                 from: *sender,
                                 to,
@@ -119,6 +122,8 @@ where
                         blobs = %batch.blob_count,
                         "processing batch"
                     );
+
+                    let _slot = config.timestamp_to_slot(batch.block_timestamp);
 
                     tracker.total_blobs += batch.blob_count as u64;
                     tracker.batches_processed += 1;
