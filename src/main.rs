@@ -1,19 +1,19 @@
 use alloy_consensus::{BlockHeader, Typed2718};
-use alloy_primitives::{Address, B256, address};
+use alloy_primitives::{address, Address, B256};
 use eyre::Result;
 use futures::Future;
 use futures_util::TryStreamExt;
-use reth::api::FullNodeComponents;
-use reth::builder::NodeTypes;
-use reth::primitives::EthPrimitives;
-use reth::rpc::types::TransactionTrait;
+use reth::{
+    api::FullNodeComponents, builder::NodeTypes, primitives::EthPrimitives,
+    rpc::types::TransactionTrait,
+};
 use reth_exex::{ExExContext, ExExEvent, ExExNotification};
 use reth_node_ethereum::EthereumNode;
 use reth_tracing::tracing;
 use serde::{Deserialize, Serialize};
 
-pub const BATCH_INBOX: Address = address!("Ff00000000000000000000000000000000000130");
-pub const BATCHER: Address = address!("2F60A5184c63ca94f82a27100643DbAbe4F3f7Fd");
+const BATCH_INBOX: Address = address!("Ff00000000000000000000000000000000000130");
+const BATCHER: Address = address!("2F60A5184c63ca94f82a27100643DbAbe4F3f7Fd");
 
 struct Deriver<Node: FullNodeComponents> {
     exex_ctx: ExExContext<Node>,
@@ -22,14 +22,14 @@ struct Deriver<Node: FullNodeComponents> {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct UnichainBatchTracker {
+struct UnichainBatchTracker {
     pub batches_processed: u64,
     pub total_blobs: u64,
     pub batches: Vec<BatchTransaction>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct BatchTransaction {
+struct BatchTransaction {
     pub tx_hash: B256,
     pub block_number: u64,
     pub block_hash: B256,
@@ -90,10 +90,8 @@ where
 
                         let from_address = *sender;
                         let tx_type = tx.ty();
-                        let blob_hashes: Vec<B256> = tx
-                            .blob_versioned_hashes()
-                            .map(|h| h.to_vec())
-                            .unwrap_or_default();
+                        let blob_hashes: Vec<B256> =
+                            tx.blob_versioned_hashes().map(|h| h.to_vec()).unwrap_or_default();
                         let blob_count = blob_hashes.len();
 
                         if from_address != expected_batcher {
@@ -139,8 +137,9 @@ where
         }
 
         if let Some(committed_chain) = notification.committed_chain() {
-            ctx.events
-                .send(ExExEvent::FinishedHeight(committed_chain.tip().num_hash()))?;
+            // this is crucial so that Reth knows what blocks have been processed
+            // and pruning can happen
+            ctx.events.send(ExExEvent::FinishedHeight(committed_chain.tip().num_hash()))?;
         }
     }
 

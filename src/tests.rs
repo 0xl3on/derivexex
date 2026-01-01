@@ -1,17 +1,14 @@
-use crate::{BATCH_INBOX, init, unichain_batch_exex};
+use crate::{init, unichain_batch_exex, BATCH_INBOX};
 use alloy_consensus::TxLegacy;
 use alloy_eips::eip7685::Requests;
-use alloy_primitives::{Address, B256, TxKind};
+use alloy_primitives::{Address, TxKind, B256};
 use eyre::Result;
-use reth::api::Block as _;
-use reth::revm::db::BundleState;
+use reth::{api::Block as _, revm::db::BundleState};
 use reth_execution_types::{Chain, ExecutionOutcome};
-use reth_exex_test_utils::{PollOnce, TestExExHandle, test_exex_context};
+use reth_exex_test_utils::{test_exex_context, PollOnce, TestExExHandle};
 use reth_primitives::{Block, BlockBody, Header, Receipt, RecoveredBlock, Transaction, TxType};
 use reth_testing_utils::generators::{rng, sign_tx_with_random_key_pair};
-use std::future::Future;
-use std::pin::pin;
-use std::sync::Once;
+use std::{future::Future, pin::pin, sync::Once};
 
 static INIT: Once = Once::new();
 
@@ -83,10 +80,7 @@ async fn test_exex_handles_multiple_blocks() -> Result<()> {
     let block1 = build_block(1, vec![batch_tx1]);
     let block2 = build_block(2, vec![other_tx, batch_tx2]);
 
-    let chain = build_chain(
-        vec![block1, block2],
-        vec![vec![receipt1], vec![receipt2, receipt3]],
-    );
+    let chain = build_chain(vec![block1, block2], vec![vec![receipt1], vec![receipt2, receipt3]]);
 
     handle.send_notification_chain_committed(chain).await?;
     exex.poll_once().await?;
@@ -102,9 +96,7 @@ async fn test_exex_handles_revert() -> Result<()> {
     let (tx, receipt) = build_batch_tx()?;
     let chain = build_single_block_chain(vec![tx], vec![receipt]);
 
-    handle
-        .send_notification_chain_committed(chain.clone())
-        .await?;
+    handle.send_notification_chain_committed(chain.clone()).await?;
     exex.poll_once().await?;
 
     handle.send_notification_chain_reverted(chain).await?;
@@ -132,10 +124,8 @@ mod helpers {
     use super::*;
 
     pub fn build_batch_tx() -> Result<(reth_primitives::TransactionSigned, Receipt)> {
-        let tx = Transaction::Legacy(TxLegacy {
-            to: TxKind::Call(BATCH_INBOX),
-            ..Default::default()
-        });
+        let tx =
+            Transaction::Legacy(TxLegacy { to: TxKind::Call(BATCH_INBOX), ..Default::default() });
 
         #[allow(clippy::needless_update)]
         let receipt = Receipt {
@@ -222,14 +212,8 @@ mod helpers {
         txs: Vec<reth_primitives::TransactionSigned>,
     ) -> RecoveredBlock<Block> {
         Block {
-            header: Header {
-                number,
-                ..Default::default()
-            },
-            body: BlockBody {
-                transactions: txs,
-                ..Default::default()
-            },
+            header: Header { number, ..Default::default() },
+            body: BlockBody { transactions: txs, ..Default::default() },
         }
         .seal_slow()
         .try_recover()
