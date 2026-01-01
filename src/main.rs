@@ -1,7 +1,13 @@
+mod config;
+mod pipeline;
+mod providers;
+
 use alloy_consensus::{BlockHeader, Typed2718};
-use alloy_primitives::{address, Address, B256};
+use alloy_primitives::{Address, B256};
+use config::UnichainConfig;
 use futures::Future;
 use futures_util::TryStreamExt;
+use pipeline::DerivationPipeline;
 use reth::{
     api::FullNodeComponents, builder::NodeTypes, primitives::EthPrimitives,
     rpc::types::TransactionTrait,
@@ -11,19 +17,11 @@ use reth_node_ethereum::EthereumNode;
 use reth_tracing::tracing;
 use serde::{Deserialize, Serialize};
 
-const BATCH_INBOX: Address = address!("Ff00000000000000000000000000000000000130");
-const BATCHER: Address = address!("2F60A5184c63ca94f82a27100643DbAbe4F3f7Fd");
-
-struct Deriver<Node: FullNodeComponents> {
-    exex_ctx: ExExContext<Node>,
-    expected_batcher: Address,
-    tracker: UnichainBatchTracker,
-}
-
 #[derive(Debug, Default, Clone)]
 struct UnichainBatchTracker {
     pub batches_processed: u64,
     pub total_blobs: u64,
+    pub frames_decoded: u64,
     pub batches: Vec<BatchTransaction>,
 }
 
@@ -49,6 +47,7 @@ impl UnichainBatchTracker {
             target: "derivexex::tracker",
             batches = %self.batches_processed,
             blobs = %self.total_blobs,
+            frames = %self.frames_decoded,
             "stats"
         );
     }
@@ -60,17 +59,20 @@ pub async fn init<Node>(
 where
     Node: FullNodeComponents<Types: NodeTypes<Primitives = EthPrimitives>>,
 {
-    Ok(unichain_batch_exex(ctx, BATCHER))
+    let config = UnichainConfig::from_env().await?;
+    Ok(unichain_batch_exex(ctx, config))
 }
 
 pub(crate) async fn unichain_batch_exex<Node>(
     mut ctx: ExExContext<Node>,
-    expected_batcher: Address,
+    config: UnichainConfig,
 ) -> eyre::Result<()>
 where
     Node: FullNodeComponents<Types: NodeTypes<Primitives = EthPrimitives>>,
 {
-    // this does not do anything relevant atm, but already holding transactions
+    let expected_batcher = config.batcher;
+    let batch_inbox = config.batch_inbox;
+    let _pipeline = DerivationPipeline::new(config);
     let mut tracker = UnichainBatchTracker::new();
     let mut blocks_processed: u64 = 0;
 
@@ -80,9 +82,7 @@ where
                 tracing::debug!(target: "derivexex::exex", chain = ?chain.range(), "chain committed");
                 blocks_processed += chain.blocks().len() as u64;
 
-                // this could be simpler just a blocks_iter with for_each, but this way feels easier
-                // to reason about
-                chain
+                let batch_txs: Vec<BatchTransaction> = chain
                     .blocks_iter()
                     .flat_map(|block| {
                         let block_number = block.number();
@@ -91,11 +91,10 @@ where
                         block.transactions_with_sender().filter_map(move |(sender, tx)| {
                             let to = tx.to()?;
 
-                            if to != BATCH_INBOX || *sender != expected_batcher {
+                            if to != batch_inbox || *sender != expected_batcher {
                                 return None;
                             }
 
-                            // actually perform the blobs fetching here
                             let blob_hashes: Vec<B256> =
                                 tx.blob_versioned_hashes().map(|h| h.to_vec()).unwrap_or_default();
 
@@ -111,19 +110,20 @@ where
                             })
                         })
                     })
-                    .for_each(|batch| {
-                        tracing::debug!(
-                            target: "derivexex::exex",
-                            tx = %batch.tx_hash,
-                            blobs = %batch.blob_count,
-                            "valid batch"
-                        );
+                    .collect();
 
-                        // update tracker with context
-                        tracker.total_blobs += batch.blob_count as u64;
-                        tracker.batches_processed += 1;
-                        tracker.batches.push(batch);
-                    });
+                for batch in batch_txs {
+                    tracing::debug!(
+                        target: "derivexex::exex",
+                        tx = %batch.tx_hash,
+                        blobs = %batch.blob_count,
+                        "processing batch"
+                    );
+
+                    tracker.total_blobs += batch.blob_count as u64;
+                    tracker.batches_processed += 1;
+                    tracker.batches.push(batch);
+                }
 
                 if blocks_processed % 100 == 0 {
                     tracker.log_stats();
@@ -143,8 +143,6 @@ where
         }
 
         if let Some(committed_chain) = notification.committed_chain() {
-            // this is crucial so that Reth knows what blocks have been processed
-            // and pruning can happen
             ctx.events.send(ExExEvent::FinishedHeight(committed_chain.tip().num_hash()))?;
         }
     }
