@@ -1,6 +1,5 @@
 use alloy_consensus::{BlockHeader, Typed2718};
 use alloy_primitives::{address, Address, B256};
-use eyre::Result;
 use futures::Future;
 use futures_util::TryStreamExt;
 use reth::{
@@ -55,7 +54,9 @@ impl UnichainBatchTracker {
     }
 }
 
-pub async fn init<Node>(ctx: ExExContext<Node>) -> Result<impl Future<Output = Result<()>>>
+pub async fn init<Node>(
+    ctx: ExExContext<Node>,
+) -> eyre::Result<impl Future<Output = eyre::Result<()>>>
 where
     Node: FullNodeComponents<Types: NodeTypes<Primitives = EthPrimitives>>,
 {
@@ -69,55 +70,60 @@ pub(crate) async fn unichain_batch_exex<Node>(
 where
     Node: FullNodeComponents<Types: NodeTypes<Primitives = EthPrimitives>>,
 {
+    // this does not do anything relevant atm, but already holding transactions
     let mut tracker = UnichainBatchTracker::new();
     let mut blocks_processed: u64 = 0;
 
     while let Some(notification) = ctx.notifications.try_next().await? {
         match &notification {
-            ExExNotification::ChainCommitted { new } => {
-                tracing::debug!(target: "derivexex::exex", chain = ?new.range(), "chain committed");
-                blocks_processed += new.blocks().len() as u64;
+            ExExNotification::ChainCommitted { new: chain } => {
+                tracing::debug!(target: "derivexex::exex", chain = ?chain.range(), "chain committed");
+                blocks_processed += chain.blocks().len() as u64;
 
-                for block in new.blocks_iter() {
-                    let block_number = block.number();
-                    let block_hash = block.hash();
+                // this could be simpler just a blocks_iter with for_each, but this way feels easier
+                // to reason about
+                chain
+                    .blocks_iter()
+                    .flat_map(|block| {
+                        let block_number = block.number();
+                        let block_hash = block.hash();
 
-                    for (sender, tx) in block.transactions_with_sender() {
-                        let Some(to_address) = tx.to() else { continue };
-                        if to_address != BATCH_INBOX {
-                            continue;
-                        }
+                        block.transactions_with_sender().filter_map(move |(sender, tx)| {
+                            let to = tx.to()?;
 
-                        let from_address = *sender;
-                        let tx_type = tx.ty();
-                        let blob_hashes: Vec<B256> =
-                            tx.blob_versioned_hashes().map(|h| h.to_vec()).unwrap_or_default();
-                        let blob_count = blob_hashes.len();
+                            if to != BATCH_INBOX || *sender != expected_batcher {
+                                return None;
+                            }
 
-                        if from_address != expected_batcher {
-                            tracing::warn!(
-                                target: "derivexex::exex",
-                                sender = %from_address,
-                                expected = %expected_batcher,
-                                "unexpected batcher"
-                            );
-                        } else {
-                            tracing::debug!(target: "derivexex::exex", sender = %from_address, "valid batch");
-                        }
+                            // actually perform the blobs fetching here
+                            let blob_hashes: Vec<B256> =
+                                tx.blob_versioned_hashes().map(|h| h.to_vec()).unwrap_or_default();
+
+                            Some(BatchTransaction {
+                                tx_hash: *tx.tx_hash(),
+                                block_number,
+                                block_hash,
+                                from: *sender,
+                                to,
+                                tx_type: tx.ty(),
+                                blob_count: blob_hashes.len(),
+                                blob_hashes,
+                            })
+                        })
+                    })
+                    .for_each(|batch| {
+                        tracing::debug!(
+                            target: "derivexex::exex",
+                            tx = %batch.tx_hash,
+                            blobs = %batch.blob_count,
+                            "valid batch"
+                        );
+
+                        // update tracker with context
+                        tracker.total_blobs += batch.blob_count as u64;
                         tracker.batches_processed += 1;
-                        tracker.total_blobs += blob_count as u64;
-                        tracker.batches.push(BatchTransaction {
-                            tx_hash: *tx.tx_hash(),
-                            block_number,
-                            block_hash,
-                            from: from_address,
-                            to: to_address,
-                            tx_type,
-                            blob_count,
-                            blob_hashes,
-                        });
-                    }
-                }
+                        tracker.batches.push(batch);
+                    });
 
                 if blocks_processed % 100 == 0 {
                     tracker.log_stats();
@@ -149,7 +155,7 @@ where
     Ok(())
 }
 
-fn main() -> Result<()> {
+fn main() -> eyre::Result<()> {
     reth::cli::Cli::parse_args().run(|builder, _args| async move {
         let handle = builder
             .node(EthereumNode::default())
