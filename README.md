@@ -12,6 +12,7 @@ By own Paradigm's definition, that is repeated across their articles and docs, a
 
 * https://github.com/paradigmxyz/reth-exex-examples
 * https://github.com/paradigmxyz/reth/
+* https://github.com/op-rs/kona/
 * https://www.paradigm.xyz/2024/05/reth-exex
 * https://docs.unichain.org/
 * https://etherscan.io/address/0xFf00000000000000000000000000000000000130
