@@ -1,11 +1,15 @@
-//! clean and correct beacon api wrapper
+//! Basic and clean beacon api wrapper for fetching blob and chain data
 
 use alloy_eips::eip4844::{kzg_to_versioned_hash, Blob};
 use alloy_primitives::B256;
 use alloy_rpc_types_beacon::sidecar::BeaconBlobBundle;
 use reqwest::Client;
 
+use super::beacon_api_types::{GenesisResponse, SpecResponse};
+
 const BLOB_SIDECARS_PATH: &str = "/eth/v1/beacon/blob_sidecars";
+const SPEC_PATH: &str = "/eth/v1/config/spec";
+const GENESIS_PATH: &str = "/eth/v1/beacon/genesis";
 
 #[derive(thiserror::Error, Debug)]
 pub enum BeaconError {
@@ -21,15 +25,25 @@ pub struct BeaconBlobProvider {
 }
 
 impl BeaconBlobProvider {
-    /// create a new http client, indifferent for having tls or not
     pub fn new(beacon_url: &str) -> Self {
-        // just remove a trailing `/` if present
         Self { client: Client::new(), base: beacon_url.trim_end_matches('/').to_string() }
     }
 
     #[inline]
     fn blob_sidecars_url(&self, slot: u64) -> String {
         format!("{}{}/{}", self.base, BLOB_SIDECARS_PATH, slot)
+    }
+
+    pub async fn genesis(&self) -> Result<GenesisResponse, BeaconError> {
+        let url = format!("{}{}", self.base, GENESIS_PATH);
+
+        Ok(self.client.get(&url).send().await?.json().await?)
+    }
+
+    pub async fn spec(&self) -> Result<SpecResponse, BeaconError> {
+        let url = format!("{}{}", self.base, SPEC_PATH);
+
+        Ok(self.client.get(&url).send().await?.json().await?)
     }
 
     pub async fn get_blobs_by_slot(&self, slot: u64) -> Result<BeaconBlobBundle, BeaconError> {
