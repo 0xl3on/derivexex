@@ -1,5 +1,5 @@
 use alloy_consensus::{BlockHeader, Typed2718};
-use alloy_primitives::{address, Address, B256};
+use alloy_primitives::{Address, B256, address};
 use eyre::Result;
 use futures::Future;
 use futures_util::TryStreamExt;
@@ -47,7 +47,7 @@ impl UnichainBatchTracker {
 
     pub fn log_stats(&self) {
         tracing::info!(
-            target: "unichain::tracker",
+            target: "derivexex::tracker",
             batches = %self.batches_processed,
             blobs = %self.total_blobs,
             "stats"
@@ -75,7 +75,7 @@ where
     while let Some(notification) = ctx.notifications.try_next().await? {
         match &notification {
             ExExNotification::ChainCommitted { new } => {
-                tracing::debug!(target: "unichain::exex", chain = ?new.range(), "chain committed");
+                tracing::debug!(target: "derivexex::exex", chain = ?new.range(), "chain committed");
                 blocks_processed += new.blocks().len() as u64;
 
                 for block in new.blocks_iter() {
@@ -98,13 +98,13 @@ where
 
                         if from_address != expected_batcher {
                             tracing::warn!(
-                                target: "unichain::exex",
+                                target: "derivexex::exex",
                                 sender = %from_address,
                                 expected = %expected_batcher,
                                 "unexpected batcher"
                             );
                         } else {
-                            tracing::debug!(target: "unichain::exex", sender = %from_address, "valid batch");
+                            tracing::debug!(target: "derivexex::exex", sender = %from_address, "valid batch");
                         }
                         tracker.batches_processed += 1;
                         tracker.total_blobs += blob_count as u64;
@@ -127,14 +127,14 @@ where
             }
             ExExNotification::ChainReorged { old, new } => {
                 tracing::debug!(
-                    target: "unichain::exex",
+                    target: "derivexex::exex",
                     from = ?old.range(),
                     to = ?new.range(),
                     "chain reorged"
                 );
             }
             ExExNotification::ChainReverted { old } => {
-                tracing::debug!(target: "unichain::exex", chain = ?old.range(), "chain reverted");
+                tracing::debug!(target: "derivexex::exex", chain = ?old.range(), "chain reverted");
             }
         }
 
@@ -144,7 +144,7 @@ where
         }
     }
 
-    tracing::info!(target: "unichain::exex", "shutting down");
+    tracing::info!(target: "derivexex::exex", "shutting down");
     tracker.log_stats();
 
     Ok(())

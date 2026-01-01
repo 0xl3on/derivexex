@@ -2678,6 +2678,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "derivexex"
+version = "0.1.0"
+dependencies = [
+ "alloy-consensus",
+ "alloy-eips",
+ "alloy-network",
+ "alloy-primitives",
+ "alloy-signer",
+ "alloy-signer-local",
+ "eyre",
+ "futures",
+ "futures-util",
+ "hex",
+ "reth",
+ "reth-execution-types",
+ "reth-exex",
+ "reth-exex-test-utils",
+ "reth-node-api",
+ "reth-node-ethereum",
+ "reth-primitives",
+ "reth-testing-utils",
+ "reth-tracing",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing-subscriber 0.3.22",
+]
+
+[[package]]
 name = "diatomic-waker"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10922,35 +10951,6 @@ name = "unicase"
 version = "2.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "75b844d17643ee918803943289730bec8aac480150456169e647ed0b576ba539"
-
-[[package]]
-name = "unichain"
-version = "0.1.0"
-dependencies = [
- "alloy-consensus",
- "alloy-eips",
- "alloy-network",
- "alloy-primitives",
- "alloy-signer",
- "alloy-signer-local",
- "eyre",
- "futures",
- "futures-util",
- "hex",
- "reth",
- "reth-execution-types",
- "reth-exex",
- "reth-exex-test-utils",
- "reth-node-api",
- "reth-node-ethereum",
- "reth-primitives",
- "reth-testing-utils",
- "reth-tracing",
- "serde",
- "serde_json",
- "tokio",
- "tracing-subscriber 0.3.22",
-]
 
 [[package]]
 name = "unicode-ident"
