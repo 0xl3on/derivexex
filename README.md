@@ -17,3 +17,4 @@ By own Paradigm's definition, that is repeated across their articles and docs, a
 * https://docs.unichain.org/
 * https://etherscan.io/address/0xFf00000000000000000000000000000000000130
 * https://etherscan.io/address/0x2f60a5184c63ca94f82a27100643dbabe4f3f7fd
+* https://specs.optimism.io/
