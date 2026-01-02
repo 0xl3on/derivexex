@@ -6,6 +6,7 @@ A minimal Rollup Derivation Pipeline built using Reth's ExEx
 - [Motivation](#motivation)
 - [What is an ExEx?](#what-is-an-exex)
 - [What are Ethereum Blobs?](#what-are-ethereum-blobs)
+- [KZG Commitments and Versioned Hashes](#kzg-commitments-and-versioned-hashes)
 - [The L1 and L2 Relationship](#the-l1-and-l2-relationship)
 - [What is a Sequencing Epoch?](#what-is-a-sequencing-epoch)
 - [What is a Batch?](#what-is-a-batch)
@@ -23,7 +24,11 @@ An ExEx is basically a [Future](https://doc.rust-lang.org/std/future/trait.Futur
 
 ## What are Ethereum Blobs?
 
-Blobs (Binary Large Object) were introduced on Ethereum in Dencun fork (2024). They are a temporary (they are pruned from consensus after ~18 days), cheaper way for Layer 2's to post data to the L1 and have a standard size of 128kb. Blobs contents are called `frames` (it's definition is just below)
+Blobs (Binary Large Object) were introduced on Ethereum in Dencun fork (2024). They are a temporary (they are pruned from consensus after ~18 days, more below), cheaper way for Layer 2's to post data to the L1 and have a standard size of 128kb. Blobs contents are called `frames` (it's definition is just below)
+
+## KZG Commitments and Versioned Hashes
+
+Each blob (128kb) has a KZG commitment, a 48byte proof of its contents. The L1 execution layer doesn't store full blobs, only their versioned hashes. A versioned hash is derived from the KZG commitment and is what gets stored in EIP-4844 transactions. To fetch a blob from the beacon node (sidecar), you use the versioned hash as a lookup key.
 
 ## The L1 and L2 Relationship
 
