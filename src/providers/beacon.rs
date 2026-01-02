@@ -62,6 +62,9 @@ impl BeaconBlobProvider {
         let bundle = self.get_blobs_by_slot(slot).await?;
 
         for sidecar in bundle.data {
+            // each blob has a kzg commitment, we can use it to get the hash.
+            // a kzg commitment is a way to verify the integrity of the blob, explaining in a very
+            // simple way!
             let hash = kzg_to_versioned_hash(sidecar.kzg_commitment.as_slice());
 
             if hash == versioned_hash {
