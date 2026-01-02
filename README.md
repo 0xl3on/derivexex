@@ -1,5 +1,5 @@
 # derivexex
-A minimal Rollup Derivation Pipeline built using Reth's ExEx
+A minimal Rollup Derivation Pipeline built using Reth's ExEx.
 
 ## Table of Contents
 
@@ -24,7 +24,7 @@ An ExEx is basically a [Future](https://doc.rust-lang.org/std/future/trait.Futur
 
 ## What are Ethereum Blobs?
 
-Blobs (Binary Large Object) were introduced on Ethereum in Dencun fork (2024). They are a temporary (they are pruned from consensus after ~18 days, more below), cheaper way for Layer 2's to post data to the L1 and have a standard size of 128kb. Blobs contents are called `frames` (it's definition is just below)
+Blobs (Binary Large Object) were introduced on Ethereum in Dencun fork (2024). They are a temporary (they are pruned from consensus after ~18 days, more below), cheaper way for Layer 2's to post data to the L1 and have a standard size of 128kb. Blobs contents are called `frames` (it's definition is just below).
 
 ## KZG Commitments and Versioned Hashes
 
@@ -36,11 +36,11 @@ Each L2 block is tied to an L1 block called its "L1 origin". `A L1 block can be 
 
 ## What is a Batch?
 
-A batch is the data needed to build one L2 block. It contains an `epoch number, an L2 timestamp, and a list of transactions`. Batches are compressed together into [channels](#what-are-frames) for efficiency.
+A batch is the data needed to build one L2 block. It contains an `epoch number, an L2 timestamp, and a list of transactions`. Batches are compressed together into [channels](#what-are-frames) for compression efficiency.
 
 ## What are Optimism Channels?
 
-A channel is a sequence of batches compressed together. Compressing multiple batches as a group yields better compression ratios than compressing each individually. A channel is identified by a unique 16-byte ID and info about a certain L2 block `can be span across more than one L1 block`
+A channel is a sequence of batches compressed together. Compressing multiple batches as a group yields better compression ratios than compressing each individually. A channel is identified by a unique 16-byte ID and info about a certain L2 block `can be span across more than one L1 block`.
 
 ## What are Frames?
 
