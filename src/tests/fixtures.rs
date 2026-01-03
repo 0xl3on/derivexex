@@ -14,7 +14,7 @@ fn blob_cache_path(slot: u64, hash: &B256) -> PathBuf {
 }
 
 /// loads a cached blob from local file if available.
-pub fn load_cached_blob(slot: u64, hash: &B256) -> Option<Blob> {
+fn load_cached_blob(slot: u64, hash: &B256) -> Option<Box<Blob>> {
     let path = blob_cache_path(slot, hash);
     if !path.exists() {
         return None;
@@ -25,7 +25,7 @@ pub fn load_cached_blob(slot: u64, hash: &B256) -> Option<Blob> {
         return None;
     }
 
-    Some(Blob::from_slice(&data))
+    Some(Box::new(Blob::from_slice(&data)))
 }
 
 pub fn save_blob_to_cache(slot: u64, hash: &B256, blob: &Blob) -> std::io::Result<()> {
@@ -38,24 +38,23 @@ pub fn save_blob_to_cache(slot: u64, hash: &B256, blob: &Blob) -> std::io::Resul
 
 /// gets a blob either from cache or by fetching from beacon API.
 /// automatically caches fetched blobs for future use.
+/// returns Box<Blob> to avoid 131KB stack allocation.
 pub async fn get_or_fetch_blob(
     beacon: &crate::providers::BeaconBlobProvider,
     slot: u64,
     hash: B256,
-) -> eyre::Result<Blob> {
+) -> eyre::Result<Box<Blob>> {
     if let Some(blob) = load_cached_blob(slot, &hash) {
         tracing::debug!(slot, %hash, "loaded blob from cache");
         return Ok(blob);
     }
 
-    // fetching from api only if caching didnt work
     tracing::info!(slot, %hash, "fetching blob from beacon API");
     let blob = beacon.get_blob_by_hash(slot, hash).await?;
 
-    // Cache for future use
     if let Err(e) = save_blob_to_cache(slot, &hash, &blob) {
         tracing::warn!(error = %e, "failed to cache blob");
     }
 
-    Ok(blob)
+    Ok(Box::new(blob))
 }

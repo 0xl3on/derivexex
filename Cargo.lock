@@ -2728,7 +2728,6 @@ dependencies = [
  "futures",
  "futures-util",
  "hex",
- "op-alloy-consensus",
  "reqwest",
  "reth",
  "reth-execution-types",
