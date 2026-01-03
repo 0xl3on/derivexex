@@ -12,6 +12,7 @@ A minimal Rollup Derivation Pipeline built using Reth's ExEx.
 - [What is a Batch?](#what-is-a-batch)
 - [What are Optimism Channels?](#what-are-optimism-channels)
 - [What are Frames?](#what-are-frames)
+- [Derivation Pipeline Flow](#derivation-pipeline-flow)
 - [Sources](#sources)
 
 ## Motivation
@@ -45,6 +46,13 @@ A channel is a sequence of batches compressed together. Compressing multiple bat
 ## What are Frames?
 
 A frame is a chunk of a channel that fits into a blob. `Since blobs are limited to 128KB and channels can be larger, channels are split into ordered frames`. Each frame contains a channel ID, a frame number, payload data, and a flag indicating if it's the last frame. Once all frames arrive, the channel is reassembled and decompressed.
+
+## Derivation Pipeline Flow
+```
+L1 Blobs → Frames → Channel → Decompress → RLP Decode → Batch
+```
+
+TODO: Write more about this flow
 
 ## Sources
 

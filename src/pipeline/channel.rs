@@ -5,14 +5,18 @@
 //! - `PendingChannel`: buffers frames until all arrive. tracks which frames we have and if we've
 //!   seen the last one.
 //! - `ChannelAssembler`: routes incoming frames to their pending channels and yields complete ones.
+//! 
 use super::frame::ChannelFrame;
 use std::{collections::HashMap, io::Read};
 
 type ChannelId = [u8; 16];
 
-/// Zlib deflate compression method (lower 4 bits of first byte)
+// zlib has a very specific header format:
+/// the lower nibble is always 8, which is the compression method DEFLATE
+/// common first bytes for zlib are: 0x78, 0x68, 0x58, all have lower nibble = 8
 const ZLIB_DEFLATE_METHOD: u8 = 8;
-/// Brotli compression version byte
+
+/// brotli doesnt have a nice header format, so in the op stack, they use a version byte prefix.
 const BROTLI_VERSION: u8 = 1;
 
 #[derive(thiserror::Error, Debug)]
@@ -33,9 +37,8 @@ pub struct Channel {
 }
 
 impl Channel {
-    /// Decompresses channel data. Detects compression type from first byte:
-    /// - Zlib: lower nibble == 8 (deflate method)
-    /// - Brotli: first byte == 1
+    /// - zlib: lower nibble == 8 (4 bits)(deflate method)
+    /// - brotli: first byte == 1
     pub fn decompress(&self) -> Result<Vec<u8>, ChannelError> {
         if self.data.is_empty() {
             return Err(ChannelError::Empty);
@@ -46,6 +49,8 @@ impl Channel {
         if first == BROTLI_VERSION {
             self.decompress_brotli()
         } else if (first & 0x0F) == ZLIB_DEFLATE_METHOD {
+            // here we use a bit mask to check if the lower nibble is 8 because 0x0F is 0000 1111
+            // so if we do the & operation, we will get the lower 4 bits of the first byte!
             self.decompress_zlib()
         } else {
             Err(ChannelError::Decompression(format!("unknown compression type: {}", first)))
@@ -53,13 +58,13 @@ impl Channel {
     }
 
     fn decompress_zlib(&self) -> Result<Vec<u8>, ChannelError> {
-        // Zlib: decompress entire data (header included)
+        // zlib: decompress entire data (header included)
         miniz_oxide::inflate::decompress_to_vec_zlib(&self.data)
             .map_err(|e| ChannelError::Decompression(format!("zlib: {:?}", e)))
     }
 
     fn decompress_brotli(&self) -> Result<Vec<u8>, ChannelError> {
-        // Brotli: skip version byte
+        // brotli: skip version byte (first byte)
         let mut decoder = brotli::Decompressor::new(&self.data[1..], 4096);
         let mut out = Vec::new();
         decoder.read_to_end(&mut out).map_err(|e| ChannelError::Decompression(e.to_string()))?;
