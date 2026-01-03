@@ -5,7 +5,6 @@
 //! - `PendingChannel`: buffers frames until all arrive. tracks which frames we have and if we've
 //!   seen the last one.
 //! - `ChannelAssembler`: routes incoming frames to their pending channels and yields complete ones.
-//!
 use super::frame::ChannelFrame;
 use std::{collections::HashMap, io::Read};
 
