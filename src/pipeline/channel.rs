@@ -10,12 +10,19 @@ use std::{collections::HashMap, io::Read};
 
 type ChannelId = [u8; 16];
 
+/// Zlib deflate compression method (lower 4 bits of first byte)
+const ZLIB_DEFLATE_METHOD: u8 = 8;
+/// Brotli compression version byte
+const BROTLI_VERSION: u8 = 1;
+
 #[derive(thiserror::Error, Debug)]
 pub enum ChannelError {
     #[error("Decompression failed: {0}")]
     Decompression(String),
     #[error("Channel incomplete")]
     Incomplete,
+    #[error("Empty channel data")]
+    Empty,
 }
 
 #[derive(Debug, Clone)]
@@ -25,35 +32,37 @@ pub struct Channel {
     pub frame_count: usize,
 }
 
-/// utilities for decompressing Channels after they have all their frames
 impl Channel {
+    /// Decompresses channel data. Detects compression type from first byte:
+    /// - Zlib: lower nibble == 8 (deflate method)
+    /// - Brotli: first byte == 1
     pub fn decompress(&self) -> Result<Vec<u8>, ChannelError> {
         if self.data.is_empty() {
-            return Ok(Vec::new());
+            return Err(ChannelError::Empty);
         }
 
-        match self.data[0] {
-            0x00 => self.decompress_zlib(),
-            0x01 => self.decompress_brotli(),
-            _ => Ok(self.data.clone()),
+        let first = self.data[0];
+
+        if first == BROTLI_VERSION {
+            self.decompress_brotli()
+        } else if (first & 0x0F) == ZLIB_DEFLATE_METHOD {
+            self.decompress_zlib()
+        } else {
+            Err(ChannelError::Decompression(format!("unknown compression type: {}", first)))
         }
     }
 
     fn decompress_zlib(&self) -> Result<Vec<u8>, ChannelError> {
-        let mut decoder = flate2::read::ZlibDecoder::new(&self.data[1..]);
-        let mut out = Vec::new();
-
-        decoder.read_to_end(&mut out).map_err(|e| ChannelError::Decompression(e.to_string()))?;
-
-        Ok(out)
+        // Zlib: decompress entire data (header included)
+        miniz_oxide::inflate::decompress_to_vec_zlib(&self.data)
+            .map_err(|e| ChannelError::Decompression(format!("zlib: {:?}", e)))
     }
 
     fn decompress_brotli(&self) -> Result<Vec<u8>, ChannelError> {
+        // Brotli: skip version byte
         let mut decoder = brotli::Decompressor::new(&self.data[1..], 4096);
         let mut out = Vec::new();
-
         decoder.read_to_end(&mut out).map_err(|e| ChannelError::Decompression(e.to_string()))?;
-
         Ok(out)
     }
 }

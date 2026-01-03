@@ -2716,6 +2716,7 @@ dependencies = [
  "alloy-eips",
  "alloy-network",
  "alloy-primitives",
+ "alloy-rlp",
  "alloy-rpc-types-beacon",
  "alloy-serde",
  "alloy-signer",
@@ -2724,10 +2725,10 @@ dependencies = [
  "brotli 7.0.0",
  "dotenvy",
  "eyre",
- "flate2",
  "futures",
  "futures-util",
  "hex",
+ "miniz_oxide",
  "reqwest",
  "reth",
  "reth-execution-types",
@@ -2744,6 +2745,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.22",
+ "unsigned-varint",
 ]
 
 [[package]]
