@@ -1,6 +1,8 @@
+mod batch;
 mod channel;
 mod frame;
 
+pub use batch::{Batch, BatchError, BatchType, SingleBatch, SpanBatch, SpanBatchElement};
 pub use channel::{Channel, ChannelAssembler};
 pub use frame::{ChannelFrame, FrameDecoder};
 

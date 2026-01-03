@@ -8,6 +8,7 @@ use config::UnichainConfig;
 use futures::Future;
 use futures_util::TryStreamExt;
 use pipeline::DerivationPipeline;
+use providers::PoolBeaconBlobProvider;
 use reth::{
     api::FullNodeComponents, builder::NodeTypes, primitives::EthPrimitives,
     rpc::types::TransactionTrait,
@@ -15,6 +16,7 @@ use reth::{
 use reth_exex::{ExExContext, ExExEvent, ExExNotification};
 use reth_node_ethereum::EthereumNode;
 use reth_tracing::tracing;
+use std::sync::Arc;
 
 #[derive(Debug, Default, Clone)]
 struct UnichainBatchTracker {
@@ -72,7 +74,12 @@ where
 {
     let expected_batcher = config.batcher;
     let batch_inbox = config.batch_inbox;
-    let mut pipeline = DerivationPipeline::new(config.clone());
+
+    // Create combined blob provider: tries pool first (fast), falls back to beacon API
+    let blob_provider =
+        PoolBeaconBlobProvider::new(Arc::new(ctx.pool().clone()), &config.beacon_url);
+    let mut pipeline = DerivationPipeline::new(config.clone(), blob_provider);
+
     let mut tracker = UnichainBatchTracker::new();
     let mut blocks_processed: u64 = 0;
 
@@ -205,6 +212,7 @@ fn process_channel(
 ) -> eyre::Result<()> {
     use alloy_primitives::Bytes;
     use alloy_rlp::Decodable;
+    use pipeline::Batch;
 
     tracker.channels_completed += 1;
 
@@ -214,7 +222,6 @@ fn process_channel(
     let mut cursor = decompressed.as_slice();
 
     while !cursor.is_empty() {
-        // decode the rlp bytes to get the batch data..
         let batch_bytes = match Bytes::decode(&mut cursor) {
             Ok(b) => b,
             Err(_) => break,
@@ -224,97 +231,48 @@ fn process_channel(
             continue;
         }
 
-        let batch_type = batch_bytes[0];
+        // decode the raw rlp encoded batch bytes to get the batch data
+        match Batch::decode(&batch_bytes) {
+            Ok(Batch::Single(single)) => {
+                tracker.l2_blocks_derived += 1;
+                tracker.l2_txs_derived += single.transactions.len() as u64;
 
-        // decode span batch (type=1)
-        // span batches are multiple blocks that are compressed together
-        if batch_type == 1 {
-            if let Some((block_count, tx_count)) = decode_span_batch_summary(&batch_bytes[1..]) {
+                tracing::debug!(
+                    target: "derivexex::pipeline",
+                    batch_type = "single",
+                    epoch = single.epoch_num,
+                    timestamp = single.timestamp,
+                    txs = single.transactions.len(),
+                    "decoded batch"
+                );
+            }
+            Ok(Batch::Span(span)) => {
+                let block_count = span.blocks.len() as u64;
+                let tx_count: u64 = span.blocks.iter().map(|b| b.transactions.len() as u64).sum();
+
                 tracker.l2_blocks_derived += block_count;
                 tracker.l2_txs_derived += tx_count;
 
                 tracing::debug!(
                     target: "derivexex::pipeline",
                     batch_type = "span",
+                    l1_origin = span.l1_origin_num,
                     l2_blocks = block_count,
                     l2_txs = tx_count,
                     "decoded batch"
                 );
             }
-        } else if batch_type == 0 {
-            // single batch (type=0) - one block
-            // after delta upgrade,
-            todo!("single batch (type=0) - one block");
+            Err(e) => {
+                tracing::warn!(
+                    target: "derivexex::pipeline",
+                    error = %e,
+                    "failed to decode batch"
+                );
+            }
         }
     }
 
     Ok(())
-}
-
-/// extracts block_count and total_tx_count from a span batch. this is a temporary function but we
-/// have it just to show we know how to deal with the data. even though we do a lot of decoding and
-/// cursor through raw bytes, its safe because we know the format of the data
-///
-/// span batch format (https://specs.optimism.io/protocol/delta/span-batches.html#future-batch-format-extension):
-///
-/// ```text
-/// SpanBatch = SpanBatchPrefix ++ SpanBatchPayload
-///
-/// SpanBatchPrefix:
-///   rel_timestamp:    varint    <- skip
-///   l1_origin_num:    varint    <- skip
-///   parent_check:     20 bytes  <- skip
-///   l1_origin_check:  20 bytes  <- skip
-///
-/// SpanBatchPayload:
-///   block_count:      varint    <- extract this
-///   origin_bits:      bitfield  <- skip (ceil(block_count/8) bytes)
-///   block_tx_counts:  [varint]  <- sum these (one per block)
-///   txs:              ...       <- skip (transaction data)
-/// ```
-fn decode_span_batch_summary(data: &[u8]) -> Option<(u64, u64)> {
-    let mut cursor = data;
-
-    // --- SpanBatchPrefix ---
-    // rel_timestamp (varint) - relative timestamp of first block
-    let (_, rest) = unsigned_varint::decode::u64(cursor).ok()?;
-    cursor = rest;
-
-    // l1_origin_num (varint) - L1 origin block number
-    let (_, rest) = unsigned_varint::decode::u64(cursor).ok()?;
-    cursor = rest;
-
-    // parent_check (20 bytes) + l1_origin_check (20 bytes)
-    if cursor.len() < 40 {
-        return None;
-    }
-    cursor = &cursor[40..];
-
-    // --- SpanBatchPayload ---
-    // block_count (varint) - number of L2 blocks in this batch
-    let (block_count, rest) = unsigned_varint::decode::u64(cursor).ok()?;
-    cursor = rest;
-
-    if block_count == 0 || block_count > 10_000_000 {
-        return None;
-    }
-
-    // origin_bits (bitfield) - one bit per block indicating L1 origin change
-    let bits_len = (block_count as usize + 7) / 8;
-    if cursor.len() < bits_len {
-        return None;
-    }
-    cursor = &cursor[bits_len..];
-
-    // block_tx_counts (varint per block) - transaction count for each L2 block
-    let mut total_tx_count = 0u64;
-    for _ in 0..block_count {
-        let (tx_count, rest) = unsigned_varint::decode::u64(cursor).ok()?;
-        total_tx_count += tx_count;
-        cursor = rest;
-    }
-
-    Some((block_count, total_tx_count))
 }
 
 fn main() -> eyre::Result<()> {
