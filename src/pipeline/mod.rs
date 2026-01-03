@@ -6,32 +6,33 @@ pub use batch::{Batch, BatchError, BatchType, SingleBatch, SpanBatch, SpanBatchE
 pub use channel::{Channel, ChannelAssembler};
 pub use frame::{ChannelFrame, FrameDecoder};
 
-use crate::{config::UnichainConfig, providers::BeaconBlobProvider};
+use crate::{
+    config::UnichainConfig,
+    providers::{BlobProvider, BlobProviderError},
+};
 use alloy_eips::eip4844::Blob;
 use alloy_primitives::B256;
 use std::sync::Arc;
 
 #[derive(thiserror::Error, Debug)]
 pub enum PipelineError {
-    #[error("Beacon error: {0}")]
-    Beacon(#[from] crate::providers::beacon::BeaconError),
+    #[error("Blob error: {0}")]
+    Blob(#[from] BlobProviderError),
     #[error("Frame decode error: {0}")]
     FrameDecode(String),
     #[error("Channel error: {0}")]
     Channel(String),
 }
 
-pub struct DerivationPipeline {
+pub struct DerivationPipeline<B: BlobProvider> {
     config: Arc<UnichainConfig>,
-    beacon: BeaconBlobProvider,
+    blob_provider: B,
     assembler: ChannelAssembler,
 }
 
-impl DerivationPipeline {
-    pub fn new(config: UnichainConfig) -> Self {
-        let beacon = BeaconBlobProvider::new(&config.beacon_url);
-
-        Self { config: Arc::new(config), beacon, assembler: ChannelAssembler::new() }
+impl<B: BlobProvider> DerivationPipeline<B> {
+    pub fn new(config: UnichainConfig, blob_provider: B) -> Self {
+        Self { config: Arc::new(config), blob_provider, assembler: ChannelAssembler::new() }
     }
 
     pub async fn process_blobs(
@@ -45,10 +46,9 @@ impl DerivationPipeline {
         let mut frames = Vec::new();
 
         for hash in blob_hashes {
-            match self.beacon.get_blob_by_hash(slot, *hash).await {
+            match self.blob_provider.get_blob(slot, *hash).await {
                 Ok(blob) => {
                     let blob_frames = self.decode_blob(&blob)?;
-
                     frames.extend(blob_frames);
                 }
                 Err(e) => {
@@ -69,7 +69,6 @@ impl DerivationPipeline {
 
     fn decode_blob(&self, blob: &Blob) -> Result<Vec<ChannelFrame>, PipelineError> {
         let data = decode_blob_data(blob);
-
         FrameDecoder::decode_frames(&data).map_err(|e| PipelineError::FrameDecode(e.to_string()))
     }
 

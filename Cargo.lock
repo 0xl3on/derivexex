@@ -2739,6 +2739,7 @@ dependencies = [
  "reth-primitives",
  "reth-testing-utils",
  "reth-tracing",
+ "reth-transaction-pool",
  "serde",
  "serde_json",
  "thiserror 2.0.17",
