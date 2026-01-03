@@ -49,7 +49,7 @@ A frame is a chunk of a channel that fits into a blob. `Since blobs are limited 
 
 ## Derivation Pipeline Flow
 ```
-L1 Blobs → Frames → Channel → Decompress → RLP Decode → Batch
+L1 Blobs → Frames → Channel → Decompress → RLP Decode → Raw Bytes Batch -> 
 ```
 
 TODO: Write more about this flow

@@ -251,9 +251,9 @@ fn process_channel(
     Ok(())
 }
 
-/// extracts block_count and total_tx_count from a span batch. this is a temporary function but we have it just to show we know how to deal with the data.
-/// even though we do a lot of decoding and cursor through raw bytes, its safe because we know the
-/// format of the data
+/// extracts block_count and total_tx_count from a span batch. this is a temporary function but we
+/// have it just to show we know how to deal with the data. even though we do a lot of decoding and
+/// cursor through raw bytes, its safe because we know the format of the data
 ///
 /// span batch format (https://specs.optimism.io/protocol/delta/span-batches.html#future-batch-format-extension):
 ///
