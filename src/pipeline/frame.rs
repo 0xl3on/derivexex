@@ -4,7 +4,6 @@
 //!   and frame_number.
 //! - `FrameDecoder`: parses blob data into frames. handles the derivation version byte and frame
 //!   boundaries
-//! 
 use std::ops::Range;
 
 #[derive(thiserror::Error, Debug)]

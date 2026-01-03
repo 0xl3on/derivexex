@@ -89,7 +89,7 @@ const BLOB_MAX_DATA_SIZE: usize = 130044;
 const BLOB_ENCODING_ROUNDS: usize = 1024;
 
 /// Decodes blob data from EIP-4844 field element encoding (OP v0 format).
-/// Based on kona's BlobData::decode implementation.
+/// https://github.com/op-rs/kona/blob/fe6dfcf771059109f1d75043d5ecbbfa3b6ca1a5/crates/protocol/derive/src/sources/blob_data.rs#L29
 pub fn decode_blob_data(blob: &Blob) -> Vec<u8> {
     let data: &[u8] = blob.as_ref();
 
@@ -155,6 +155,8 @@ pub fn decode_blob_data(blob: &Blob) -> Vec<u8> {
 }
 
 /// Decodes a field element: copies 31 bytes to output, returns the encoded high byte.
+/// the decoding logic was mostly taken from kona's BlobData::decode implementation
+/// https://github.com/op-rs/kona/blob/fe6dfcf771059109f1d75043d5ecbbfa3b6ca1a5/crates/protocol/derive/src/sources/blob_data.rs#L106
 fn decode_field_element(
     data: &[u8],
     output_pos: usize,
@@ -175,6 +177,8 @@ fn decode_field_element(
 }
 
 /// Reassembles 4x6-bit encoded chunks into 3 bytes of output.
+/// the reassembling logic was mostly taken from kona's BlobData::decode implementation
+/// https://github.com/op-rs/kona/blob/fe6dfcf771059109f1d75043d5ecbbfa3b6ca1a5/crates/protocol/derive/src/sources/blob_data.rs#L126
 fn reassemble_bytes(mut output_pos: usize, encoded_byte: &[u8; 4], output: &mut [u8]) -> usize {
     output_pos -= 1;
     let x = (encoded_byte[0] & 0b0011_1111) | ((encoded_byte[1] & 0b0011_0000) << 2);
