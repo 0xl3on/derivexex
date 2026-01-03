@@ -4,6 +4,7 @@ A minimal Rollup Derivation Pipeline built using Reth's ExEx.
 ## Table of Contents
 
 - [Motivation](#motivation)
+- [Implementation Status](#implementation-status)
 - [What is an ExEx?](#what-is-an-exex)
 - [What are Ethereum Blobs?](#what-are-ethereum-blobs)
 - [KZG Commitments and Versioned Hashes](#kzg-commitments-and-versioned-hashes)
@@ -18,6 +19,31 @@ A minimal Rollup Derivation Pipeline built using Reth's ExEx.
 ## Motivation
 
 Inspired by [this](https://www.paradigm.xyz/2024/05/reth-exex) great Paradigm article, I've decided to build this minimal Rollup Derivation Pipeline specifically for [Unichain](https://www.unichain.org/), even though it can be easily abstracted to be usable across other op-stack L2's. This is merely for fun and should not be used in prd!
+
+
+## Implementation Status
+
+This is a project built for learning Kona and Reth internals, not meant for production use. Here's what I've built so far:
+
+### Blob Fetching
+Blobs are fetched first from Reth using ExEx context, if it fails, we fallback to the BEACON_API set on .env.
+
+### Frame Decoding
+Implements the OP v0 blob encoding.
+
+### Channel Assembly
+Channels are formed of frames  that are grouped by their 16-byte channel ID and reassembled in order. A channel is complete when `is_last` flag is set and all prior frames (0 to N) have arrived.
+
+### Batch Decoding
+Handles both batch types from the OP Stack spec, logic derived from Kona's repo:
+- **Single Batch**
+- **Span Batch**: Introduced later, more efficient since it has more data packed.
+
+### Persistence
+SQLite in memory and on disk using rusqlite.
+
+### What's Not Implemented
+Deposit transactions, L2 block attribute derivation, safe head tracking, full reorg handling, epoch validation, and metrics. We extract L2 transactions but don't build complete L2 blocks yet (this README will be updated along features implementation).
 
 ## What is an ExEx?
 
@@ -49,7 +75,7 @@ A frame is a chunk of a channel that fits into a blob. `Since blobs are limited 
 
 ## Derivation Pipeline Flow
 ```
-L1 Blobs → Frames → Channel → Decompress → RLP Decode → Raw Bytes Batch -> 
+L1 Blobs → Frames → Channel → Decompress → RLP Decode → Raw Bytes Batch ->
 ```
 
 TODO: Write more about this flow

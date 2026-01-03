@@ -1,6 +1,6 @@
 //! ExEx unit tests, these are just basic stuff like fetching chain commits, blocks, txs, etc.
 use super::helpers::*;
-use crate::{config::UnichainConfig, unichain_batch_exex};
+use crate::{config::UnichainConfig, persistence::SqliteDb, unichain_batch_exex};
 use alloy_primitives::Address;
 use eyre::Result;
 use reth_exex_test_utils::{test_exex_context, PollOnce, TestExExHandle};
@@ -11,14 +11,16 @@ type BoxedExEx = Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>>;
 async fn setup_exex() -> Result<(TestExExHandle, BoxedExEx)> {
     let (ctx, handle) = test_exex_context().await?;
     let config = test_config();
-    let exex = Box::pin(unichain_batch_exex(ctx, config));
+    let db = SqliteDb::in_memory()?;
+    let exex = Box::pin(unichain_batch_exex(ctx, config, db));
     Ok((handle, exex))
 }
 
 async fn setup_exex_with_batcher(batcher: Address) -> Result<(TestExExHandle, BoxedExEx)> {
     let (ctx, handle) = test_exex_context().await?;
     let config = UnichainConfig { batcher, ..test_config() };
-    let exex = Box::pin(unichain_batch_exex(ctx, config));
+    let db = SqliteDb::in_memory()?;
+    let exex = Box::pin(unichain_batch_exex(ctx, config, db));
     Ok((handle, exex))
 }
 

@@ -1,22 +1,21 @@
 mod config;
+mod persistence;
 mod pipeline;
 mod providers;
 
-use alloy_consensus::{BlockHeader, Typed2718};
-use alloy_primitives::{Address, B256};
+use alloy_consensus::{BlockHeader, Transaction, Typed2718};
+use alloy_primitives::B256;
 use config::UnichainConfig;
 use futures::Future;
 use futures_util::TryStreamExt;
+use persistence::{DerivationCheckpoint, DerivationDb, SqliteDb};
 use pipeline::DerivationPipeline;
 use providers::PoolBeaconBlobProvider;
-use reth::{
-    api::FullNodeComponents, builder::NodeTypes, primitives::EthPrimitives,
-    rpc::types::TransactionTrait,
-};
+use reth::{api::FullNodeComponents, builder::NodeTypes, primitives::EthPrimitives};
 use reth_exex::{ExExContext, ExExEvent, ExExNotification};
 use reth_node_ethereum::EthereumNode;
 use reth_tracing::tracing;
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 #[derive(Debug, Default, Clone)]
 struct UnichainBatchTracker {
@@ -62,15 +61,26 @@ where
     Node: FullNodeComponents<Types: NodeTypes<Primitives = EthPrimitives>>,
 {
     let config = UnichainConfig::from_env().await?;
-    Ok(unichain_batch_exex(ctx, config))
+
+    // Initialize persistence - use env var or default path
+    let db_path: PathBuf = std::env::var("DERIVEXEX_DB")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("derivexex.db"));
+    let db = SqliteDb::open(&db_path)?;
+
+    tracing::info!(target: "derivexex::init", path = %db_path.display(), "opened persistence db");
+
+    Ok(unichain_batch_exex(ctx, config, db))
 }
 
-pub(crate) async fn unichain_batch_exex<Node>(
+pub(crate) async fn unichain_batch_exex<Node, D>(
     mut ctx: ExExContext<Node>,
     config: UnichainConfig,
+    db: D,
 ) -> eyre::Result<()>
 where
     Node: FullNodeComponents<Types: NodeTypes<Primitives = EthPrimitives>>,
+    D: DerivationDb,
 {
     let expected_batcher = config.batcher;
     let batch_inbox = config.batch_inbox;
@@ -80,8 +90,30 @@ where
         PoolBeaconBlobProvider::new(Arc::new(ctx.pool().clone()), &config.beacon_url);
     let mut pipeline = DerivationPipeline::new(config.clone(), blob_provider);
 
-    let mut tracker = UnichainBatchTracker::new();
+    // Restore state from persistence
+    let mut tracker = match db.load_checkpoint()? {
+        Some(checkpoint) => {
+            tracing::info!(
+                target: "derivexex::init",
+                l1_block = checkpoint.l1_block_number,
+                l2_blocks = checkpoint.l2_blocks_derived,
+                l2_txs = checkpoint.l2_txs_derived,
+                "restored from checkpoint"
+            );
+            UnichainBatchTracker {
+                l2_blocks_derived: checkpoint.l2_blocks_derived,
+                l2_txs_derived: checkpoint.l2_txs_derived,
+                ..Default::default()
+            }
+        }
+        None => {
+            tracing::info!(target: "derivexex::init", "no checkpoint found, starting fresh");
+            UnichainBatchTracker::new()
+        }
+    };
+
     let mut blocks_processed: u64 = 0;
+    let mut last_committed_block: Option<(u64, B256)> = None;
 
     while let Some(notification) = ctx.notifications.try_next().await? {
         match &notification {
@@ -175,22 +207,63 @@ where
                     }
                 }
 
+                // Track last committed block for checkpointing
+                if let Some(tip) = chain.blocks().values().last() {
+                    last_committed_block = Some((tip.number, tip.hash()));
+                }
+
+                // Checkpoint every 100 blocks
                 if blocks_processed % 100 == 0 {
                     tracker.log_stats();
+
+                    if let Some((block_num, block_hash)) = last_committed_block {
+                        let checkpoint = DerivationCheckpoint {
+                            l1_block_number: block_num,
+                            l1_block_hash: block_hash.0,
+                            l2_blocks_derived: tracker.l2_blocks_derived,
+                            l2_txs_derived: tracker.l2_txs_derived,
+                            timestamp: std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap_or_default()
+                                .as_secs(),
+                        };
+
+                        if let Err(e) = db.save_checkpoint(&checkpoint) {
+                            tracing::warn!(
+                                target: "derivexex::persistence",
+                                error = %e,
+                                "failed to save checkpoint"
+                            );
+                        } else {
+                            tracing::debug!(
+                                target: "derivexex::persistence",
+                                l1_block = block_num,
+                                "checkpoint saved"
+                            );
+                        }
+                    }
                 }
             }
             ExExNotification::ChainReorged { old, new } => {
-                tracing::debug!(
+                tracing::warn!(
                     target: "derivexex::exex",
                     from = ?old.range(),
                     to = ?new.range(),
-                    "chain reorged"
+                    "chain reorged - clearing pending channels"
                 );
-                // TODO: handle this
+
+                // Clear pending channels on reorg as they may be invalid
+                if let Err(e) = db.clear_pending_channels() {
+                    tracing::error!(target: "derivexex::persistence", error = %e, "failed to clear channels");
+                }
             }
             ExExNotification::ChainReverted { old } => {
-                tracing::debug!(target: "derivexex::exex", chain = ?old.range(), "chain reverted");
-                // TODO: handle this
+                tracing::warn!(target: "derivexex::exex", chain = ?old.range(), "chain reverted");
+
+                // Clear pending channels on revert
+                if let Err(e) = db.clear_pending_channels() {
+                    tracing::error!(target: "derivexex::persistence", error = %e, "failed to clear channels");
+                }
             }
         }
 
@@ -201,6 +274,25 @@ where
 
     tracing::info!(target: "derivexex::exex", "shutting down");
     tracker.log_stats();
+
+    // Save final checkpoint on shutdown
+    if let Some((block_num, block_hash)) = last_committed_block {
+        let checkpoint = DerivationCheckpoint {
+            l1_block_number: block_num,
+            l1_block_hash: block_hash.0,
+            l2_blocks_derived: tracker.l2_blocks_derived,
+            l2_txs_derived: tracker.l2_txs_derived,
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+        };
+        if let Err(e) = db.save_checkpoint(&checkpoint) {
+            tracing::error!(target: "derivexex::persistence", error = %e, "failed to save final checkpoint");
+        } else {
+            tracing::info!(target: "derivexex::persistence", l1_block = block_num, "final checkpoint saved");
+        }
+    }
 
     Ok(())
 }
