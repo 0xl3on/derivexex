@@ -3,10 +3,9 @@
 //! We start with SQLite because it's easy and good.
 
 mod sqlite;
-mod types;
 
+pub use derivexex_types::{ChannelState, DerivationCheckpoint};
 pub use sqlite::SqliteDb;
-pub use types::{ChannelState, DerivationCheckpoint};
 
 /// Trait for persisting derivation pipeline state.
 /// Can be used to add support for different database backends.

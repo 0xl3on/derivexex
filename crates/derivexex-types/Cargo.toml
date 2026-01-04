@@ -1,0 +1,10 @@
+[package]
+name = "derivexex-types"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Shared types for derivexex"
+
+[dependencies]
+serde = { workspace = true }

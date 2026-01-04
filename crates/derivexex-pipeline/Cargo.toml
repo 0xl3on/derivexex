@@ -1,0 +1,18 @@
+[package]
+name = "derivexex-pipeline"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "OP Stack derivation pipeline for decoding blobs, frames, channels, and batches"
+
+[dependencies]
+alloy-primitives = { workspace = true }
+alloy-eips = { workspace = true }
+alloy-rlp = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+miniz_oxide = { workspace = true }
+brotli = { workspace = true }
+unsigned-varint = { workspace = true }
+hex = { workspace = true }

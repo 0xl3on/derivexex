@@ -1,9 +1,9 @@
 //! Integration tests using real blob data.
 
 use super::{fixtures::get_or_fetch_blob, helpers::*};
-use crate::pipeline::{decode_blob_data, Batch, ChannelAssembler, FrameDecoder, SpanBatch};
 use alloy_primitives::{Bytes, B256};
 use alloy_rlp::Decodable;
+use derivexex_pipeline::{decode_blob_data, Batch, ChannelAssembler, FrameDecoder, SpanBatch};
 use eyre::Result;
 
 /// integration test using real blob data from mainnet.

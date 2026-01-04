@@ -30,7 +30,6 @@ pub enum ChannelError {
 pub struct Channel {
     pub id: ChannelId,
     pub data: Vec<u8>,
-    #[allow(dead_code)]
     pub frame_count: usize,
 }
 
@@ -95,7 +94,6 @@ impl PendingChannel {
         // the key is the frame number, the value is the frame.
         self.frames.insert(frame.frame_number, frame);
     }
-
 
     #[inline]
     /// Optimized O(1) completeness check for a channel

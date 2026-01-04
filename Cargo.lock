@@ -2722,13 +2722,13 @@ dependencies = [
  "alloy-signer",
  "alloy-signer-local",
  "async-trait",
- "brotli 7.0.0",
+ "derivexex-pipeline",
+ "derivexex-types",
  "dotenvy",
  "eyre",
  "futures",
  "futures-util",
  "hex",
- "miniz_oxide",
  "reqwest",
  "reth",
  "reth-execution-types",
@@ -2747,7 +2747,28 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.22",
+]
+
+[[package]]
+name = "derivexex-pipeline"
+version = "0.1.0"
+dependencies = [
+ "alloy-eips",
+ "alloy-primitives",
+ "alloy-rlp",
+ "brotli 7.0.0",
+ "hex",
+ "miniz_oxide",
+ "thiserror 2.0.17",
+ "tracing",
  "unsigned-varint",
+]
+
+[[package]]
+name = "derivexex-types"
+version = "0.1.0"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

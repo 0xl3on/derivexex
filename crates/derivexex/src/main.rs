@@ -1,16 +1,20 @@
 mod config;
 mod persistence;
-mod pipeline;
 mod providers;
 
 use alloy_consensus::{BlockHeader, Transaction};
-use alloy_primitives::B256;
+use alloy_eips::eip4844::Blob;
+use alloy_primitives::{Bytes, B256};
+use alloy_rlp::Decodable;
 use config::UnichainConfig;
+use derivexex_pipeline::{
+    decode_blob_data_into, max_blob_data_size, Batch, Channel, ChannelAssembler, ChannelFrame,
+    FrameDecoder,
+};
 use futures::Future;
 use futures_util::TryStreamExt;
 use persistence::{DerivationCheckpoint, DerivationDb, SqliteDb};
-use pipeline::DerivationPipeline;
-use providers::PoolBeaconBlobProvider;
+use providers::{BlobProvider, PoolBeaconBlobProvider};
 use reth::{api::FullNodeComponents, builder::NodeTypes, primitives::EthPrimitives};
 use reth_exex::{ExExContext, ExExEvent, ExExNotification};
 use reth_node_ethereum::EthereumNode;
@@ -51,6 +55,62 @@ impl UnichainBatchTracker {
             l2_txs = %self.l2_txs_derived,
             "derivation stats"
         );
+    }
+}
+
+/// Wrapper around the pipeline crate's functionality with blob fetching
+struct DerivationPipeline<B: BlobProvider> {
+    blob_provider: B,
+    assembler: ChannelAssembler,
+    /// Reusable buffer for blob decoding to avoid 130KB allocation per blob
+    blob_decode_buf: Vec<u8>,
+}
+
+impl<B: BlobProvider> DerivationPipeline<B> {
+    fn new(blob_provider: B) -> Self {
+        Self {
+            blob_provider,
+            assembler: ChannelAssembler::new(),
+            // Pre-allocate the decode buffer once, reused for all blobs
+            blob_decode_buf: vec![0u8; max_blob_data_size()],
+        }
+    }
+
+    async fn process_blobs(
+        &mut self,
+        slot: u64,
+        blob_hashes: &[B256],
+    ) -> eyre::Result<Vec<ChannelFrame>> {
+        let mut frames = Vec::new();
+
+        for hash in blob_hashes {
+            match self.blob_provider.get_blob(slot, *hash).await {
+                Ok(blob) => {
+                    let blob_frames = self.decode_blob(&blob)?;
+                    frames.extend(blob_frames);
+                }
+                Err(e) => {
+                    tracing::warn!(target: "derivexex::pipeline", hash = %hash, error = %e, "failed to fetch blob");
+                }
+            }
+        }
+
+        for frame in &frames {
+            self.assembler.add_frame(frame.clone());
+        }
+
+        Ok(frames)
+    }
+
+    fn decode_blob(&mut self, blob: &Blob) -> eyre::Result<Vec<ChannelFrame>> {
+        let len = decode_blob_data_into(blob, &mut self.blob_decode_buf);
+        FrameDecoder::decode_frames(&self.blob_decode_buf[..len])
+            .map_err(|e| eyre::eyre!("Frame decode error: {}", e))
+    }
+
+    #[inline]
+    fn take_complete_channels(&mut self) -> Vec<Channel> {
+        self.assembler.take_complete()
     }
 }
 
@@ -298,14 +358,7 @@ where
 }
 
 /// process a complete channel: decompress, decode batches, extract L2 data
-fn process_channel(
-    channel: &pipeline::Channel,
-    tracker: &mut UnichainBatchTracker,
-) -> eyre::Result<()> {
-    use alloy_primitives::Bytes;
-    use alloy_rlp::Decodable;
-    use pipeline::Batch;
-
+fn process_channel(channel: &Channel, tracker: &mut UnichainBatchTracker) -> eyre::Result<()> {
     tracker.channels_completed += 1;
 
     let decompressed = channel.decompress()?;

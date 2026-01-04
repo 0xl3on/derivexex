@@ -13,7 +13,7 @@
 
 use alloy_primitives::{Address, Bytes};
 use alloy_rlp::Decodable;
-use reth_tracing::tracing;
+use tracing;
 
 /// Batch type identifier
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,10 +43,8 @@ pub enum Batch {
 /// A single batch contains transactions for one L2 block
 #[derive(Debug, Clone)]
 pub struct SingleBatch {
-    #[allow(dead_code)]
     pub parent_hash: [u8; 32],
     pub epoch_num: u64,
-    #[allow(dead_code)]
     pub epoch_hash: [u8; 32],
     pub timestamp: u64,
     pub transactions: Vec<Bytes>,
@@ -55,12 +53,9 @@ pub struct SingleBatch {
 /// A span batch contains transactions for multiple L2 blocks
 #[derive(Debug, Clone)]
 pub struct SpanBatch {
-    #[allow(dead_code)]
     pub rel_timestamp: u64,
     pub l1_origin_num: u64,
-    #[allow(dead_code)]
     pub parent_check: [u8; 20],
-    #[allow(dead_code)]
     pub l1_origin_check: [u8; 20],
     pub blocks: Vec<SpanBatchElement>,
 }
@@ -68,9 +63,7 @@ pub struct SpanBatch {
 /// A single block within a span batch
 #[derive(Debug, Clone)]
 pub struct SpanBatchElement {
-    #[allow(dead_code)]
     pub epoch_num: u64,
-    #[allow(dead_code)]
     pub timestamp: u64,
     pub transactions: Vec<Bytes>,
 }
