@@ -18,7 +18,7 @@ use reth_tracing::tracing;
 /// Batch type identifier
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
-pub enum BatchType {
+enum BatchType {
     Single = 0,
     Span = 1,
 }
@@ -43,8 +43,10 @@ pub enum Batch {
 /// A single batch contains transactions for one L2 block
 #[derive(Debug, Clone)]
 pub struct SingleBatch {
+    #[allow(dead_code)]
     pub parent_hash: [u8; 32],
     pub epoch_num: u64,
+    #[allow(dead_code)]
     pub epoch_hash: [u8; 32],
     pub timestamp: u64,
     pub transactions: Vec<Bytes>,
@@ -53,9 +55,12 @@ pub struct SingleBatch {
 /// A span batch contains transactions for multiple L2 blocks
 #[derive(Debug, Clone)]
 pub struct SpanBatch {
+    #[allow(dead_code)]
     pub rel_timestamp: u64,
     pub l1_origin_num: u64,
+    #[allow(dead_code)]
     pub parent_check: [u8; 20],
+    #[allow(dead_code)]
     pub l1_origin_check: [u8; 20],
     pub blocks: Vec<SpanBatchElement>,
 }
@@ -63,12 +68,15 @@ pub struct SpanBatch {
 /// A single block within a span batch
 #[derive(Debug, Clone)]
 pub struct SpanBatchElement {
+    #[allow(dead_code)]
     pub epoch_num: u64,
+    #[allow(dead_code)]
     pub timestamp: u64,
     pub transactions: Vec<Bytes>,
 }
 
 /// Decoded transaction from span batch (columnar format)
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct SpanBatchTx {
     pub tx_type: u8,
@@ -85,8 +93,6 @@ pub struct SpanBatchTx {
 pub enum BatchError {
     #[error("Empty buffer")]
     EmptyBuffer,
-    #[error("Invalid batch type: {0}")]
-    InvalidType(u8),
     #[error("RLP decode error: {0}")]
     RlpError(String),
     #[error("Span batch error: {0}")]
@@ -259,12 +265,18 @@ impl SpanBatch {
 
 /// Span batch transactions in columnar format
 struct SpanBatchTransactions {
+    #[allow(dead_code)]
     contract_creation_bits: Vec<bool>,
+    #[allow(dead_code)]
     y_parity_bits: Vec<bool>,
+    #[allow(dead_code)]
     signatures: Vec<([u8; 32], [u8; 32])>, // (r, s)
+    #[allow(dead_code)]
     to_addresses: Vec<Address>,
     tx_data: Vec<Bytes>,
+    #[allow(dead_code)]
     nonces: Vec<u64>,
+    #[allow(dead_code)]
     gas_limits: Vec<u64>,
 }
 

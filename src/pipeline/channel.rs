@@ -22,8 +22,6 @@ const BROTLI_VERSION: u8 = 1;
 pub enum ChannelError {
     #[error("Decompression failed: {0}")]
     Decompression(String),
-    #[error("Channel incomplete")]
-    Incomplete,
     #[error("Empty channel data")]
     Empty,
 }
@@ -32,6 +30,7 @@ pub enum ChannelError {
 pub struct Channel {
     pub id: ChannelId,
     pub data: Vec<u8>,
+    #[allow(dead_code)]
     pub frame_count: usize,
 }
 

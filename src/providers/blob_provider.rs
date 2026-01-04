@@ -5,7 +5,7 @@
 use alloy_eips::eip4844::Blob;
 use alloy_primitives::B256;
 use async_trait::async_trait;
-use reth_transaction_pool::{BlobStore, BlobStoreError, TransactionPool};
+use reth_transaction_pool::{BlobStoreError, TransactionPool};
 use std::sync::Arc;
 
 use super::beacon::{BeaconBlobProvider, BeaconError};

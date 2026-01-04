@@ -3,7 +3,7 @@ mod persistence;
 mod pipeline;
 mod providers;
 
-use alloy_consensus::{BlockHeader, Transaction, Typed2718};
+use alloy_consensus::{BlockHeader, Transaction};
 use alloy_primitives::B256;
 use config::UnichainConfig;
 use futures::Future;
@@ -88,7 +88,7 @@ where
     // Create combined blob provider: tries pool first (fast), falls back to beacon API
     let blob_provider =
         PoolBeaconBlobProvider::new(Arc::new(ctx.pool().clone()), &config.beacon_url);
-    let mut pipeline = DerivationPipeline::new(config.clone(), blob_provider);
+    let mut pipeline = DerivationPipeline::new(blob_provider);
 
     // Restore state from persistence
     let mut tracker = match db.load_checkpoint()? {

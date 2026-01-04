@@ -2,17 +2,15 @@ mod batch;
 mod channel;
 mod frame;
 
-pub use batch::{Batch, BatchError, BatchType, SingleBatch, SpanBatch, SpanBatchElement};
+pub use batch::Batch;
+#[cfg(test)]
+pub use batch::SpanBatch;
 pub use channel::{Channel, ChannelAssembler};
 pub use frame::{ChannelFrame, FrameDecoder};
 
-use crate::{
-    config::UnichainConfig,
-    providers::{BlobProvider, BlobProviderError},
-};
+use crate::providers::{BlobProvider, BlobProviderError};
 use alloy_eips::eip4844::Blob;
 use alloy_primitives::B256;
-use std::sync::Arc;
 
 #[derive(thiserror::Error, Debug)]
 pub enum PipelineError {
@@ -20,19 +18,16 @@ pub enum PipelineError {
     Blob(#[from] BlobProviderError),
     #[error("Frame decode error: {0}")]
     FrameDecode(String),
-    #[error("Channel error: {0}")]
-    Channel(String),
 }
 
 pub struct DerivationPipeline<B: BlobProvider> {
-    config: Arc<UnichainConfig>,
     blob_provider: B,
     assembler: ChannelAssembler,
 }
 
 impl<B: BlobProvider> DerivationPipeline<B> {
-    pub fn new(config: UnichainConfig, blob_provider: B) -> Self {
-        Self { config: Arc::new(config), blob_provider, assembler: ChannelAssembler::new() }
+    pub fn new(blob_provider: B) -> Self {
+        Self { blob_provider, assembler: ChannelAssembler::new() }
     }
 
     pub async fn process_blobs(
@@ -75,11 +70,6 @@ impl<B: BlobProvider> DerivationPipeline<B> {
     #[inline]
     pub fn take_complete_channels(&mut self) -> Vec<Channel> {
         self.assembler.take_complete()
-    }
-
-    #[inline]
-    pub fn config(&self) -> &UnichainConfig {
-        &self.config
     }
 }
 

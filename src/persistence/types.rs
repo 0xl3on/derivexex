@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Serialized state of a pending (incomplete) channel.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChannelState {
     /// 16-byte channel ID.
@@ -18,6 +19,7 @@ pub struct ChannelState {
 }
 
 /// Serialized state of a single frame.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FrameState {
     pub frame_number: u16,
@@ -41,6 +43,7 @@ pub struct DerivationCheckpoint {
 }
 
 impl DerivationCheckpoint {
+    #[allow(dead_code)]
     pub fn new(l1_block_number: u64, l1_block_hash: [u8; 32]) -> Self {
         Self {
             l1_block_number,

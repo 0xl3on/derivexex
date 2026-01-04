@@ -3,8 +3,7 @@
 use super::{ChannelState, DerivationCheckpoint, DerivationDb};
 use eyre::{eyre, Result};
 use rusqlite::{params, Connection, OptionalExtension};
-use std::path::Path;
-use std::sync::Mutex;
+use std::{path::Path, sync::Mutex};
 
 /// SQLite-backed persistence for derivation state.
 pub struct SqliteDb {
@@ -21,6 +20,7 @@ impl SqliteDb {
     }
 
     /// Create an in-memory database (useful for testing).
+    #[cfg(test)]
     pub fn in_memory() -> Result<Self> {
         let conn = Connection::open_in_memory()?;
         let db = Self { conn: Mutex::new(conn) };
@@ -142,7 +142,10 @@ impl DerivationDb for SqliteDb {
     fn remove_channel(&self, channel_id: &[u8; 16]) -> Result<()> {
         let conn = self.conn.lock().map_err(|e| eyre!("lock poisoned: {e}"))?;
 
-        conn.execute("DELETE FROM pending_channels WHERE channel_id = ?1", params![channel_id.as_slice()])?;
+        conn.execute(
+            "DELETE FROM pending_channels WHERE channel_id = ?1",
+            params![channel_id.as_slice()],
+        )?;
 
         Ok(())
     }
@@ -209,5 +212,3 @@ mod tests {
         assert!(channels.is_empty());
     }
 }
-
-

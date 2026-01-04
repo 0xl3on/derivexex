@@ -17,15 +17,16 @@ pub trait DerivationDb: Send + Sync {
     /// Save a checkpoint atomically.
     fn save_checkpoint(&self, checkpoint: &DerivationCheckpoint) -> eyre::Result<()>;
 
+    #[allow(dead_code)]
     fn load_pending_channels(&self) -> eyre::Result<Vec<ChannelState>>;
 
     /// Save a pending channel (upsert).
+    #[allow(dead_code)]
     fn save_pending_channel(&self, channel: &ChannelState) -> eyre::Result<()>;
 
     /// Remove a channel (when complete or expired).
+    #[allow(dead_code)]
     fn remove_channel(&self, channel_id: &[u8; 16]) -> eyre::Result<()>;
 
     fn clear_pending_channels(&self) -> eyre::Result<()>;
 }
-
-
