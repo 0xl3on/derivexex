@@ -72,3 +72,15 @@ unsigned-varint = "0.8"
 
 # Testing
 dotenvy = "0.15"
+
+# Build profiles
+[profile.maxperf]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
+
+[profile.reproducible]
+inherits = "release"
+panic = "abort"
+codegen-units = 1
+incremental = false

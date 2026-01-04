@@ -1,0 +1,13 @@
+# exclude everything
+*
+
+# include source files
+!/crates
+!Cargo.lock
+!Cargo.toml
+
+# include for vergen constants (if used later)
+/.git
+
+# include licenses
+!LICENSE-*
