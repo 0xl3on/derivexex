@@ -14,12 +14,12 @@ use derivexex_pipeline::{
 use futures::Future;
 use futures_util::TryStreamExt;
 use persistence::{DerivationCheckpoint, DerivationDb, SqliteDb};
-use providers::{BlobProvider, PoolBeaconBlobProvider};
+use providers::{BeaconBlobProvider, BlobProvider};
 use reth::{api::FullNodeComponents, builder::NodeTypes, primitives::EthPrimitives};
 use reth_exex::{ExExContext, ExExEvent, ExExNotification};
 use reth_node_ethereum::EthereumNode;
 use reth_tracing::tracing;
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 
 #[derive(Debug, Default, Clone)]
 struct UnichainBatchTracker {
@@ -145,9 +145,8 @@ where
     let expected_batcher = config.batcher;
     let batch_inbox = config.batch_inbox;
 
-    // Create combined blob provider: tries pool first (fast), falls back to beacon API
-    let blob_provider =
-        PoolBeaconBlobProvider::new(Arc::new(ctx.pool().clone()), &config.beacon_url);
+    // Fetch blobs from beacon API (historical blobs from finalized blocks)
+    let blob_provider = BeaconBlobProvider::new(&config.beacon_url);
     let mut pipeline = DerivationPipeline::new(blob_provider);
 
     // Restore state from persistence

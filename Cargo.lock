@@ -2739,7 +2739,6 @@ dependencies = [
  "reth-primitives",
  "reth-testing-utils",
  "reth-tracing",
- "reth-transaction-pool",
  "rusqlite",
  "serde",
  "serde_json",

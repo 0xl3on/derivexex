@@ -26,7 +26,7 @@ Inspired by [this](https://www.paradigm.xyz/2024/05/reth-exex) great Paradigm ar
 This is a project built for learning Kona and Reth internals, not meant for production use. Here's what I've built so far:
 
 ### Blob Fetching
-Blobs are fetched first from Reth using ExEx context, if it fails, we fallback to the BEACON_API set on .env.
+Blobs are fetched from the Beacon API (consensus layer), since only Blob Versioned Hashes (hash derived from the KZG Commitment) are stored in the execution layer.
 
 ### Frame Decoding
 Implements the OP v0 blob encoding.
