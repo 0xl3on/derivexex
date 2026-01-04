@@ -96,19 +96,14 @@ impl PendingChannel {
         self.frames.insert(frame.frame_number, frame);
     }
 
-    fn is_complete(&self) -> bool {
-        // a channel is not complete if it's not closed.
-        if !self.is_closed {
-            return false;
-        }
 
-        // a channel is complete if all frames are received.
-        for i in 0..=self.highest_frame {
-            if !self.frames.contains_key(&i) {
-                return false;
-            }
-        }
-        true
+    #[inline]
+    /// Optimized O(1) completeness check for a channel
+    fn is_complete(&self) -> bool {
+        // A channel is complete when:
+        // 1. It's closed (we havve received the last frame)
+        // 2. We have exactly (highest_frame + 1) frames, meaning no gaps in 0..=highest_frame
+        self.is_closed && self.frames.len() == (self.highest_frame as usize + 1)
     }
 
     fn assemble(self) -> Channel {

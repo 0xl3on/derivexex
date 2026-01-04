@@ -23,11 +23,18 @@ pub enum PipelineError {
 pub struct DerivationPipeline<B: BlobProvider> {
     blob_provider: B,
     assembler: ChannelAssembler,
+    /// Reusable buffer for blob decoding to avoid 130KB allocation per blob
+    blob_decode_buf: Vec<u8>,
 }
 
 impl<B: BlobProvider> DerivationPipeline<B> {
     pub fn new(blob_provider: B) -> Self {
-        Self { blob_provider, assembler: ChannelAssembler::new() }
+        Self {
+            blob_provider,
+            assembler: ChannelAssembler::new(),
+            // Pre-allocate the decode buffer once, reused for all blobs
+            blob_decode_buf: vec![0u8; BLOB_MAX_DATA_SIZE],
+        }
     }
 
     pub async fn process_blobs(
@@ -62,9 +69,10 @@ impl<B: BlobProvider> DerivationPipeline<B> {
         Ok(frames)
     }
 
-    fn decode_blob(&self, blob: &Blob) -> Result<Vec<ChannelFrame>, PipelineError> {
-        let data = decode_blob_data(blob);
-        FrameDecoder::decode_frames(&data).map_err(|e| PipelineError::FrameDecode(e.to_string()))
+    fn decode_blob(&mut self, blob: &Blob) -> Result<Vec<ChannelFrame>, PipelineError> {
+        let len = decode_blob_data_into(blob, &mut self.blob_decode_buf);
+        FrameDecoder::decode_frames(&self.blob_decode_buf[..len])
+            .map_err(|e| PipelineError::FrameDecode(e.to_string()))
     }
 
     #[inline]
@@ -79,23 +87,22 @@ const BLOB_MAX_DATA_SIZE: usize = 130044;
 /// Number of encoding rounds (1024 field element groups of 4)
 const BLOB_ENCODING_ROUNDS: usize = 1024;
 
-/// Decodes blob data from EIP-4844 field element encoding (OP v0 format).
+/// Decodes blob data from EIP-4844 field element encoding (OP v0 format) into provided buffer.
+/// Returns the length of decoded data. Buffer must be at least BLOB_MAX_DATA_SIZE bytes.
 /// https://github.com/op-rs/kona/blob/fe6dfcf771059109f1d75043d5ecbbfa3b6ca1a5/crates/protocol/derive/src/sources/blob_data.rs#L29
-pub fn decode_blob_data(blob: &Blob) -> Vec<u8> {
+fn decode_blob_data_into(blob: &Blob, output: &mut [u8]) -> usize {
     let data: &[u8] = blob.as_ref();
 
     // Version at byte 1 (VERSIONED_HASH_VERSION_KZG position)
     if data.len() < 32 || data[1] != 0x00 {
-        return Vec::new();
+        return 0;
     }
 
     // Length from bytes 2-4 (3 bytes big-endian)
     let length = u32::from_be_bytes([0, data[2], data[3], data[4]]) as usize;
-    if length > BLOB_MAX_DATA_SIZE {
-        return Vec::new();
+    if length > BLOB_MAX_DATA_SIZE || output.len() < BLOB_MAX_DATA_SIZE {
+        return 0;
     }
-
-    let mut output = vec![0u8; BLOB_MAX_DATA_SIZE];
 
     // Round 0: copy first 27 bytes from data[5..32]
     output[0..27].copy_from_slice(&data[5..32]);
@@ -107,19 +114,17 @@ pub fn decode_blob_data(blob: &Blob) -> Vec<u8> {
 
     // Process remaining 3 field elements of round 0
     for b in encoded_byte.iter_mut().skip(1) {
-        if let Some((enc, opos, ipos)) =
-            decode_field_element(data, output_pos, input_pos, &mut output)
-        {
+        if let Some((enc, opos, ipos)) = decode_field_element(data, output_pos, input_pos, output) {
             *b = enc;
             output_pos = opos;
             input_pos = ipos;
         } else {
-            return Vec::new();
+            return 0;
         }
     }
 
     // Reassemble 4x6-bit encoded chunks into 3 bytes
-    output_pos = reassemble_bytes(output_pos, &encoded_byte, &mut output);
+    output_pos = reassemble_bytes(output_pos, &encoded_byte, output);
 
     // Remaining rounds: decode 4 field elements (128 bytes) into 127 bytes
     for _ in 1..BLOB_ENCODING_ROUNDS {
@@ -129,19 +134,28 @@ pub fn decode_blob_data(blob: &Blob) -> Vec<u8> {
 
         for d in &mut encoded_byte {
             if let Some((enc, opos, ipos)) =
-                decode_field_element(data, output_pos, input_pos, &mut output)
+                decode_field_element(data, output_pos, input_pos, output)
             {
                 *d = enc;
                 output_pos = opos;
                 input_pos = ipos;
             } else {
-                return Vec::new();
+                return 0;
             }
         }
-        output_pos = reassemble_bytes(output_pos, &encoded_byte, &mut output);
+        output_pos = reassemble_bytes(output_pos, &encoded_byte, output);
     }
 
-    output.truncate(length);
+    length
+}
+
+/// Decodes blob data from EIP-4844 field element encoding (OP v0 format).
+/// Allocates a new buffer - prefer `decode_blob_data_into` for hot paths.
+#[allow(dead_code)]
+pub fn decode_blob_data(blob: &Blob) -> Vec<u8> {
+    let mut output = vec![0u8; BLOB_MAX_DATA_SIZE];
+    let len = decode_blob_data_into(blob, &mut output);
+    output.truncate(len);
     output
 }
 
