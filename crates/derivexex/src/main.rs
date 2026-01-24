@@ -9,7 +9,7 @@ use alloy_rlp::Decodable;
 use config::UnichainConfig;
 use derivexex_pipeline::{
     decode_blob_data_into, max_blob_data_size, Batch, Channel, ChannelAssembler, ChannelFrame,
-    FrameDecoder,
+    DepositedTransaction, FrameDecoder, TRANSACTION_DEPOSITED_TOPIC,
 };
 use futures::Future;
 use futures_util::TryStreamExt;
@@ -22,13 +22,14 @@ use reth_tracing::tracing;
 use std::path::PathBuf;
 
 #[derive(Debug, Default, Clone)]
-struct UnichainBatchTracker {
+struct DerivationTracker {
     pub l1_batches_processed: u64,
     pub blobs_fetched: u64,
     pub frames_decoded: u64,
     pub channels_completed: u64,
     pub l2_blocks_derived: u64,
     pub l2_txs_derived: u64,
+    pub deposits_parsed: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -39,7 +40,7 @@ struct BatchTransaction {
     pub blob_hashes: Vec<B256>,
 }
 
-impl UnichainBatchTracker {
+impl DerivationTracker {
     pub fn new() -> Self {
         Self::default()
     }
@@ -53,6 +54,7 @@ impl UnichainBatchTracker {
             channels = %self.channels_completed,
             l2_blocks = %self.l2_blocks_derived,
             l2_txs = %self.l2_txs_derived,
+            deposits = %self.deposits_parsed,
             "derivation stats"
         );
     }
@@ -149,6 +151,8 @@ where
     let blob_provider = BeaconBlobProvider::new(&config.beacon_url);
     let mut pipeline = DerivationPipeline::new(blob_provider);
 
+    let optimism_portal = config.optimism_portal;
+
     // Restore state from persistence
     let mut tracker = match db.load_checkpoint()? {
         Some(checkpoint) => {
@@ -159,7 +163,7 @@ where
                 l2_txs = checkpoint.l2_txs_derived,
                 "restored from checkpoint"
             );
-            UnichainBatchTracker {
+            DerivationTracker {
                 l2_blocks_derived: checkpoint.l2_blocks_derived,
                 l2_txs_derived: checkpoint.l2_txs_derived,
                 ..Default::default()
@@ -167,7 +171,7 @@ where
         }
         None => {
             tracing::info!(target: "derivexex::init", "no checkpoint found, starting fresh");
-            UnichainBatchTracker::new()
+            DerivationTracker::new()
         }
     };
 
@@ -179,6 +183,50 @@ where
             ExExNotification::ChainCommitted { new: chain } => {
                 tracing::debug!(target: "derivexex::exex", chain = ?chain.range(), "chain committed");
                 blocks_processed += chain.blocks().len() as u64;
+
+                for (block, receipts) in chain.blocks_and_receipts() {
+                    let block_hash = block.hash();
+
+                    for (log_index, log) in receipts.iter().flat_map(|r| r.logs.iter()).enumerate()
+                    {
+                        if log.address != optimism_portal {
+                            continue;
+                        }
+
+                        if log.topics().first() != Some(&TRANSACTION_DEPOSITED_TOPIC) {
+                            continue;
+                        }
+
+                        let topics: Vec<B256> = log.topics().to_vec();
+                        match DepositedTransaction::from_log(
+                            log.data.data.as_ref(),
+                            &topics,
+                            block_hash,
+                            log_index as u64,
+                        ) {
+                            Ok(deposit) => {
+                                tracker.deposits_parsed += 1;
+                                tracing::debug!(
+                                    target: "derivexex::deposits",
+                                    from = %deposit.from,
+                                    to = ?deposit.to,
+                                    value = %deposit.value,
+                                    source_hash = %deposit.source_hash,
+                                    "parsed deposit"
+                                );
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    target: "derivexex::deposits",
+                                    error = %e,
+                                    block = %block_hash,
+                                    log_index = log_index,
+                                    "failed to parse deposit"
+                                );
+                            }
+                        }
+                    }
+                }
 
                 // collect batch transactions from L1 blocks, this is the data that will be used to
                 // derive the L2 blocks
@@ -357,7 +405,7 @@ where
 }
 
 /// process a complete channel: decompress, decode batches, extract L2 data
-fn process_channel(channel: &Channel, tracker: &mut UnichainBatchTracker) -> eyre::Result<()> {
+fn process_channel(channel: &Channel, tracker: &mut DerivationTracker) -> eyre::Result<()> {
     tracker.channels_completed += 1;
 
     let decompressed = channel.decompress()?;

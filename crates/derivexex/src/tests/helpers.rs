@@ -1,5 +1,5 @@
 //! Common test helpers and utilities.
-use crate::config::{UnichainConfig, BATCHER, BATCH_INBOX};
+use crate::config::{UnichainConfig, BATCHER, BATCH_INBOX, OPTIMISM_PORTAL};
 use alloy_consensus::TxLegacy;
 use alloy_eips::eip7685::Requests;
 use alloy_primitives::{Address, TxKind, B256};
@@ -29,6 +29,7 @@ pub fn test_config() -> UnichainConfig {
     UnichainConfig {
         batch_inbox: BATCH_INBOX,
         batcher: BATCHER,
+        optimism_portal: OPTIMISM_PORTAL,
         beacon_url,
         beacon_genesis_time: 1606824023,
         l1_seconds_per_slot: 12,

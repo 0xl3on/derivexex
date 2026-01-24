@@ -5,11 +5,13 @@ use crate::providers::{BeaconBlobProvider, BeaconError};
 
 pub const BATCH_INBOX: Address = address!("Ff00000000000000000000000000000000000130");
 pub const BATCHER: Address = address!("2F60A5184c63ca94f82a27100643DbAbe4F3f7Fd");
+pub const OPTIMISM_PORTAL: Address = address!("0bd48f6B86a26D3a217d0Fa6FfE2B491B956A7a2");
 
 #[derive(Debug, Clone)]
 pub struct UnichainConfig {
     pub batch_inbox: Address,
     pub batcher: Address,
+    pub optimism_portal: Address,
     pub beacon_url: String,
     pub beacon_genesis_time: u64,
     pub l1_seconds_per_slot: u64,
@@ -29,6 +31,7 @@ impl UnichainConfig {
         Ok(Self {
             batch_inbox: BATCH_INBOX,
             batcher: BATCHER,
+            optimism_portal: OPTIMISM_PORTAL,
             beacon_url,
             beacon_genesis_time: genesis.data.genesis_time,
             l1_seconds_per_slot: spec.data.seconds_per_slot,
