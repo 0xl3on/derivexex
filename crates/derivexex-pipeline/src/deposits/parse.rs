@@ -39,6 +39,7 @@ pub fn from_log(
     // [64..72)  gas_limit (uint64)
     // [72]      is_creation (bool)
     // [73..)    data (bytes)
+    // Source: https://github.com/ethereum-optimism/optimism/blob/111f3f3a3a2881899662e53e0f1b2f845b188a38/packages/contracts-bedrock/src/L1/OptimismPortal.sol#L414
     const MIN_OPAQUE_LEN: usize = 73;
     let opaque: &[u8] = log.opaqueData.as_ref();
 

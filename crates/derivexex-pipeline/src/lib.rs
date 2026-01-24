@@ -8,10 +8,14 @@
 
 mod batch;
 mod channel;
+mod deposits;
 mod frame;
 
 pub use batch::{Batch, BatchError, SingleBatch, SpanBatch, SpanBatchElement};
 pub use channel::{Channel, ChannelAssembler, ChannelError};
+pub use deposits::{
+    DepositError, DepositedTransaction, DEPOSIT_TX_TYPE, TRANSACTION_DEPOSITED_TOPIC,
+};
 pub use frame::{ChannelFrame, FrameDecoder, FrameError};
 
 use alloy_eips::eip4844::Blob;

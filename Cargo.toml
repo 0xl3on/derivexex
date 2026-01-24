@@ -39,6 +39,7 @@ alloy-rlp = "0.3"
 alloy-signer = "1.2.1"
 alloy-signer-local = "1.2.1"
 alloy-network = "1.2.1"
+alloy-sol-types = "1.2.1"
 
 # Async
 async-trait = "0.1"

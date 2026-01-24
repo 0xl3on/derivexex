@@ -10,6 +10,7 @@ description = "OP Stack derivation pipeline for decoding blobs, frames, channels
 alloy-primitives = { workspace = true }
 alloy-eips = { workspace = true }
 alloy-rlp = { workspace = true }
+alloy-sol-types = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 miniz_oxide = { workspace = true }
