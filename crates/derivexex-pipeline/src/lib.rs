@@ -10,6 +10,7 @@ mod batch;
 mod channel;
 mod deposits;
 mod frame;
+mod l1_info;
 
 pub use batch::{Batch, BatchError, SingleBatch, SpanBatch, SpanBatchElement};
 pub use channel::{Channel, ChannelAssembler, ChannelError};
@@ -17,6 +18,10 @@ pub use deposits::{
     DepositError, DepositedTransaction, DEPOSIT_TX_TYPE, TRANSACTION_DEPOSITED_TOPIC,
 };
 pub use frame::{ChannelFrame, FrameDecoder, FrameError};
+pub use l1_info::{
+    compute_l1_info_source_hash, Hardfork, L1BlockInfo, ECOTONE_L1_INFO_TX_CALLDATA_LEN,
+    ISTHMUS_L1_INFO_TX_CALLDATA_LEN, L1_ATTRIBUTES_DEPOSITOR, L1_BLOCK_ADDRESS, L1_INFO_TX_GAS,
+};
 
 use alloy_eips::eip4844::Blob;
 
