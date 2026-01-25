@@ -31,6 +31,7 @@ impl SqliteDb {
     fn init_schema(&self) -> Result<()> {
         let conn = self.conn.lock().map_err(|e| eyre!("lock poisoned: {e}"))?;
 
+        // Create tables if they don't exist
         conn.execute_batch(
             r#"
             CREATE TABLE IF NOT EXISTS checkpoint (
@@ -50,6 +51,23 @@ impl SqliteDb {
             "#,
         )?;
 
+        // Migration: add next_l2_block_number column if it doesn't exist
+        // SQLite doesn't have ADD COLUMN IF NOT EXISTS, so we check first
+        let has_column: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('checkpoint') WHERE name='next_l2_block_number'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0) > 0;
+
+        if !has_column {
+            conn.execute(
+                "ALTER TABLE checkpoint ADD COLUMN next_l2_block_number INTEGER NOT NULL DEFAULT 0",
+                [],
+            )?;
+        }
+
         Ok(())
     }
 }
@@ -58,17 +76,17 @@ impl DerivationDb for SqliteDb {
     fn load_checkpoint(&self) -> Result<Option<DerivationCheckpoint>> {
         let conn = self.conn.lock().map_err(|e| eyre!("lock poisoned: {e}"))?;
 
-        let result: Option<(i64, Vec<u8>, i64, i64, i64)> = conn
+        let result: Option<(i64, Vec<u8>, i64, i64, i64, i64)> = conn
             .query_row(
-                "SELECT l1_block_number, l1_block_hash, l2_blocks_derived, l2_txs_derived, timestamp
+                "SELECT l1_block_number, l1_block_hash, next_l2_block_number, l2_blocks_derived, l2_txs_derived, timestamp
                  FROM checkpoint WHERE id = 1",
                 [],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?)),
             )
             .optional()?;
 
         match result {
-            Some((block_num, hash_bytes, l2_blocks, l2_txs, ts)) => {
+            Some((block_num, hash_bytes, next_l2, l2_blocks, l2_txs, ts)) => {
                 let mut l1_block_hash = [0u8; 32];
                 if hash_bytes.len() == 32 {
                     l1_block_hash.copy_from_slice(&hash_bytes);
@@ -77,6 +95,7 @@ impl DerivationDb for SqliteDb {
                 Ok(Some(DerivationCheckpoint {
                     l1_block_number: block_num as u64,
                     l1_block_hash,
+                    next_l2_block_number: next_l2 as u64,
                     l2_blocks_derived: l2_blocks as u64,
                     l2_txs_derived: l2_txs as u64,
                     timestamp: ts as u64,
@@ -91,11 +110,12 @@ impl DerivationDb for SqliteDb {
 
         conn.execute(
             "INSERT OR REPLACE INTO checkpoint
-             (id, l1_block_number, l1_block_hash, l2_blocks_derived, l2_txs_derived, timestamp)
-             VALUES (1, ?1, ?2, ?3, ?4, ?5)",
+             (id, l1_block_number, l1_block_hash, next_l2_block_number, l2_blocks_derived, l2_txs_derived, timestamp)
+             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 checkpoint.l1_block_number as i64,
                 checkpoint.l1_block_hash.as_slice(),
+                checkpoint.next_l2_block_number as i64,
                 checkpoint.l2_blocks_derived as i64,
                 checkpoint.l2_txs_derived as i64,
                 checkpoint.timestamp as i64,
@@ -174,6 +194,7 @@ mod tests {
         let checkpoint = DerivationCheckpoint {
             l1_block_number: 12345,
             l1_block_hash: [0xab; 32],
+            next_l2_block_number: 67890,
             l2_blocks_derived: 100,
             l2_txs_derived: 500,
             timestamp: 1234567890,
@@ -184,6 +205,7 @@ mod tests {
         let loaded = db.load_checkpoint().unwrap().unwrap();
         assert_eq!(loaded.l1_block_number, 12345);
         assert_eq!(loaded.l1_block_hash, [0xab; 32]);
+        assert_eq!(loaded.next_l2_block_number, 67890);
         assert_eq!(loaded.l2_blocks_derived, 100);
         assert_eq!(loaded.l2_txs_derived, 500);
     }

@@ -7,6 +7,16 @@ pub const BATCH_INBOX: Address = address!("Ff00000000000000000000000000000000000
 pub const BATCHER: Address = address!("2F60A5184c63ca94f82a27100643DbAbe4F3f7Fd");
 pub const OPTIMISM_PORTAL: Address = address!("0bd48f6B86a26D3a217d0Fa6FfE2B491B956A7a2");
 
+/// Unichain SystemConfig contract on L1 (Ethereum mainnet).
+/// https://etherscan.io/address/0xc407398d063f942febbcc6f80a156b47f3f1bda6
+pub const SYSTEM_CONFIG: Address = address!("c407398d063f942febbcc6f80a156b47f3f1bda6");
+
+/// Fee scalars from SystemConfig.scalar() on 2026-01-24.
+/// - baseFeeScalar at bytes[28:32] = 2000
+/// - blobBaseFeeScalar at bytes[24:28] = 900000
+pub const BASE_FEE_SCALAR: u32 = 2000;
+pub const BLOB_BASE_FEE_SCALAR: u32 = 900_000;
+
 #[derive(Debug, Clone)]
 pub struct UnichainConfig {
     pub batch_inbox: Address,

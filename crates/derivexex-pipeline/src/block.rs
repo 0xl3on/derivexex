@@ -106,11 +106,8 @@ impl L2BlockBuilder {
         let l1_origin = self.l1_origin.clone().ok_or(BlockBuildError::NoL1Origin)?;
 
         // Capacity: 1 (L1 info) + deposits (if epoch start) + sequencer txs
-        let deposit_count = if self.sequence_number == 0 {
-            1 + self.pending_deposits.len()
-        } else {
-            1
-        };
+        let deposit_count =
+            if self.sequence_number == 0 { 1 + self.pending_deposits.len() } else { 1 };
         let mut transactions = Vec::with_capacity(deposit_count + sequencer_txs.len());
 
         // 1. L1 Attributes deposit (always first)

@@ -32,19 +32,23 @@ pub struct DerivationCheckpoint {
     pub l1_block_number: u64,
     /// Last fully processed L1 block hash.
     pub l1_block_hash: [u8; 32],
-    /// Number of L2 blocks derived so far.
+    /// Next L2 block number to derive.
+    /// This is the actual block number, not a count.
+    pub next_l2_block_number: u64,
+    /// Number of L2 blocks derived so far (for stats).
     pub l2_blocks_derived: u64,
-    /// Number of L2 transactions derived so far.
+    /// Number of L2 transactions derived so far (for stats).
     pub l2_txs_derived: u64,
     /// Timestamp of this checkpoint.
     pub timestamp: u64,
 }
 
 impl DerivationCheckpoint {
-    pub fn new(l1_block_number: u64, l1_block_hash: [u8; 32]) -> Self {
+    pub fn new(l1_block_number: u64, l1_block_hash: [u8; 32], next_l2_block_number: u64) -> Self {
         Self {
             l1_block_number,
             l1_block_hash,
+            next_l2_block_number,
             l2_blocks_derived: 0,
             l2_txs_derived: 0,
             timestamp: std::time::SystemTime::now()
