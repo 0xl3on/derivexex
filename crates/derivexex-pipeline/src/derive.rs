@@ -19,6 +19,10 @@ pub struct DeriverConfig {
     pub batcher_addr: Address,
     pub base_fee_scalar: u32,
     pub blob_base_fee_scalar: u32,
+    /// L2 chain genesis timestamp (for computing L2 block timestamps from span batches)
+    pub l2_genesis_time: u64,
+    /// L2 block time in seconds (typically 1 or 2 seconds)
+    pub l2_block_time: u64,
 }
 
 /// L1 epoch information needed to derive L2 blocks.
@@ -166,16 +170,23 @@ impl Deriver {
         span: &crate::SpanBatch,
     ) -> Result<Vec<L2Block>, DeriveError> {
         let mut blocks = Vec::with_capacity(span.blocks.len());
-        let base_epoch = span.l1_origin_num;
 
-        // Track current epoch info - start with base epoch
-        let mut current_epoch_info = match self.epoch_info.get(&base_epoch) {
+        // Get first block's epoch (already computed correctly in batch decoding)
+        let first_epoch = span.blocks.first().map(|b| b.epoch_num).unwrap_or(span.l1_origin_num);
+
+        // Track current epoch info
+        let mut current_epoch_info = match self.epoch_info.get(&first_epoch) {
             Some(info) => info.clone(),
-            None => return Err(DeriveError::MissingEpoch(base_epoch)),
+            None => return Err(DeriveError::MissingEpoch(first_epoch)),
         };
-        let mut current_epoch_num = base_epoch;
+        let mut current_epoch_num = first_epoch;
 
         for (i, element) in span.blocks.iter().enumerate() {
+            // Compute L2 block timestamp: genesis + rel_timestamp + block_idx * block_time
+            let timestamp = self.config.l2_genesis_time +
+                span.rel_timestamp +
+                (i as u64) * self.config.l2_block_time;
+
             // Check if epoch changed (element.epoch_num differs from current)
             if element.epoch_num != current_epoch_num {
                 // Try to get new epoch info, otherwise keep using current
@@ -203,11 +214,8 @@ impl Deriver {
 
             let l1_info = self.create_l1_info(&current_epoch_info);
 
-            match self.block_builder.build_block(
-                element.timestamp,
-                &l1_info,
-                element.transactions.clone(),
-            ) {
+            match self.block_builder.build_block(timestamp, &l1_info, element.transactions.clone())
+            {
                 Ok(block) => blocks.push(block),
                 Err(e) => return Err(DeriveError::BlockBuild(e)),
             }

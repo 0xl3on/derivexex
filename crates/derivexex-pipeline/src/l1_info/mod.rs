@@ -277,6 +277,23 @@ mod tests {
     }
 
     #[test]
+    fn test_source_hash_verification_block_1008() {
+        // This verifies the source_hash for block 1008 in the l2_blocks.json test output
+        // l1_block_hash = 0x8a8a8a8a... (mock hash from test)
+        // sequence_number = 8
+        let l1_block_hash = B256::repeat_byte(0x8a);
+        let sequence_number = 8u64;
+
+        let source_hash = compute_l1_info_source_hash(l1_block_hash, sequence_number);
+
+        // This is the expected source_hash from l2_blocks.json block 1008
+        let expected: B256 =
+            "0x2c7fadd35b795e92bbcce242429d49fa2adff2e189ce68e8c42cb72f95b1ca9b".parse().unwrap();
+
+        assert_eq!(source_hash, expected, "source_hash should match JSON output");
+    }
+
+    #[test]
     fn test_to_deposit_tx_ecotone() {
         let info = L1BlockInfo::new(
             12345,

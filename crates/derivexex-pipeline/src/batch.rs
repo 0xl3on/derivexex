@@ -226,28 +226,40 @@ impl SpanBatch {
         // --- SpanBatchTransactions (columnar format) ---
         let txs = SpanBatchTransactions::decode(cursor, total_tx_count)?;
 
+        // Reconstruct full transactions from columnar data
+        // TODO: Make chain_id configurable via rollup config
+        const UNICHAIN_CHAIN_ID: u64 = 130;
+        let reconstructed_txs = txs.reconstruct_transactions(UNICHAIN_CHAIN_ID);
+
         // Build blocks from decoded data
+        // Per OP spec: l1_origin_num is the L1 origin of the LAST block in the span.
+        // origin_bits indicate when the L1 origin changes (1 = changed from previous block).
+        // We need to calculate the FIRST block's epoch by counting backwards.
+        let origin_changes: u64 =
+            (0..block_count).filter(|&i| i > 0 && get_bit(origin_bits, i)).count() as u64;
+        let first_block_origin = l1_origin_num - origin_changes;
+
         let mut blocks = Vec::with_capacity(block_count);
         let mut tx_idx = 0usize;
-        let mut current_l1_origin = l1_origin_num;
+        let mut current_l1_origin = first_block_origin;
 
         for (block_idx, &tx_count) in block_tx_counts.iter().enumerate() {
-            // Check origin_bits for L1 origin change
+            // Check origin_bits for L1 origin change (increment epoch when bit is set)
             if get_bit(origin_bits, block_idx) && block_idx > 0 {
-                current_l1_origin -= 1;
+                current_l1_origin += 1;
             }
 
             let mut transactions = Vec::with_capacity(tx_count);
             for _ in 0..tx_count {
-                if tx_idx < txs.tx_data.len() {
-                    transactions.push(txs.tx_data[tx_idx].clone());
+                if tx_idx < reconstructed_txs.len() {
+                    transactions.push(reconstructed_txs[tx_idx].clone());
                 }
                 tx_idx += 1;
             }
 
             blocks.push(SpanBatchElement {
                 epoch_num: current_l1_origin,
-                timestamp: 0, // Would need genesis + rel_timestamp + block_idx * block_time
+                timestamp: 0, // Computed by Deriver using rel_timestamp + block_idx
                 transactions,
             });
         }
@@ -258,18 +270,12 @@ impl SpanBatch {
 
 /// Span batch transactions in columnar format
 struct SpanBatchTransactions {
-    #[allow(dead_code)]
     contract_creation_bits: Vec<bool>,
-    #[allow(dead_code)]
     y_parity_bits: Vec<bool>,
-    #[allow(dead_code)]
     signatures: Vec<([u8; 32], [u8; 32])>, // (r, s)
-    #[allow(dead_code)]
     to_addresses: Vec<Address>,
-    tx_data: Vec<Bytes>,
-    #[allow(dead_code)]
+    tx_data: Vec<Bytes>, // tx_type || rlp([type-specific fields])
     nonces: Vec<u64>,
-    #[allow(dead_code)]
     gas_limits: Vec<u64>,
 }
 
@@ -339,26 +345,73 @@ impl SpanBatchTransactions {
             to_addresses.push(Address::from_slice(&tos_raw[i * 20..(i + 1) * 20]));
         }
 
-        // 5. tx_data: RLP-encoded per tx (tx_type byte + type-specific data)
+        // 5. tx_data: Concatenated transaction payloads
+        // Each tx is: tx_type || type_specific_rlp_fields
+        // - Legacy (type 0x00): gas_price || value || data
+        // - EIP-2930 (type 0x01): gas_price || value || data || access_list
+        // - EIP-1559 (type 0x02): max_priority_fee || max_fee || value || data || access_list
         let mut tx_data = Vec::with_capacity(total_tx_count);
         for i in 0..total_tx_count {
-            match decode_span_tx_data(cursor) {
-                Some((data, rest)) => {
-                    tx_data.push(data);
-                    cursor = rest;
+            if cursor.is_empty() {
+                tracing::debug!(tx_idx = i, "cursor empty, filling rest with empty");
+                for _ in i..total_tx_count {
+                    tx_data.push(Bytes::new());
                 }
-                None => {
-                    tracing::debug!(
-                        tx_idx = i,
-                        remaining = cursor.len(),
-                        "stopping tx_data decode"
-                    );
-                    // Fill remaining with empty
-                    for _ in i..total_tx_count {
-                        tx_data.push(Bytes::new());
+                break;
+            }
+
+            let start = cursor;
+            let first_byte = cursor[0];
+
+            // Determine tx type and how many RLP elements to skip
+            // For typed txs (0x01, 0x02, 0x03): type byte + one RLP list containing all fields
+            // For legacy txs (first byte >= 0x80 OR small value 0x04-0x7f): 3 individual RLP
+            // elements
+            let valid;
+            if first_byte >= 0x01 && first_byte <= 0x03 {
+                // Typed tx: type byte + one RLP list
+                cursor = &cursor[1..]; // consume type byte
+                match skip_rlp_element(cursor) {
+                    Some(rest) => {
+                        cursor = rest;
+                        valid = true;
                     }
-                    break;
+                    None => {
+                        valid = false;
+                    }
                 }
+            } else if first_byte >= 0x80 ||
+                first_byte == 0x00 ||
+                (first_byte >= 0x04 && first_byte <= 0x7f)
+            {
+                // Legacy tx: 3 individual RLP elements (gas_price, value, data)
+                // Note: first_byte 0x04-0x7f could be a small gas_price value
+                valid = skip_rlp_element(cursor)
+                    .and_then(|c| skip_rlp_element(c))
+                    .and_then(|c| skip_rlp_element(c))
+                    .map(|rest| cursor = rest)
+                    .is_some();
+            } else {
+                // Shouldn't happen, but handle gracefully
+                valid = false;
+            }
+
+            if valid {
+                let consumed = start.len() - cursor.len();
+                tx_data.push(Bytes::copy_from_slice(&start[..consumed]));
+            } else {
+                // Parsing failed - we've likely reached end of tx_datas section.
+                // The remaining bytes are probably protected_bits/tx_types.
+                // Fill remaining with empty and stop parsing.
+                tracing::debug!(
+                    tx_idx = i,
+                    remaining_txs = total_tx_count - i,
+                    "reached end of tx_datas, filling remaining with empty"
+                );
+                for _ in i..total_tx_count {
+                    tx_data.push(Bytes::new());
+                }
+                break;
             }
         }
 
@@ -407,6 +460,67 @@ impl SpanBatchTransactions {
             gas_limits,
         })
     }
+
+    /// Reconstruct full RLP-encoded transactions from columnar data.
+    ///
+    /// Each transaction is reconstructed by combining:
+    /// - tx_type and type-specific fields from tx_data
+    /// - nonce from nonces
+    /// - gas_limit from gas_limits
+    /// - to address from to_addresses (if not contract creation)
+    /// - signature from signatures + y_parity_bits
+    fn reconstruct_transactions(&self, chain_id: u64) -> Vec<Bytes> {
+        let mut result = Vec::with_capacity(self.tx_data.len());
+        let mut to_idx = 0usize;
+
+        for i in 0..self.tx_data.len() {
+            let tx_bytes = &self.tx_data[i];
+            if tx_bytes.is_empty() {
+                result.push(Bytes::new());
+                if !self.contract_creation_bits.get(i).copied().unwrap_or(false) {
+                    to_idx += 1; // still consume to_address slot
+                }
+                continue;
+            }
+
+            let first_byte = tx_bytes[0];
+
+            // Determine tx type and fields:
+            // - 0x01, 0x02, 0x03: typed tx (type prefix + RLP list)
+            // - 0x00, 0x04-0x7f, 0x80+: legacy tx (starts with gas_price, no type prefix)
+            let (tx_type, tx_fields) = if first_byte >= 0x01 && first_byte <= 0x03 {
+                (first_byte, &tx_bytes[1..])
+            } else {
+                (0x00u8, tx_bytes.as_ref())
+            };
+
+            let nonce = self.nonces.get(i).copied().unwrap_or(0);
+            let gas_limit = self.gas_limits.get(i).copied().unwrap_or(0);
+            let is_create = self.contract_creation_bits.get(i).copied().unwrap_or(false);
+            let y_parity = self.y_parity_bits.get(i).copied().unwrap_or(false);
+            let (sig_r, sig_s) = self.signatures.get(i).copied().unwrap_or(([0u8; 32], [0u8; 32]));
+
+            let to_addr = if is_create {
+                None
+            } else {
+                let addr = self.to_addresses.get(to_idx).copied();
+                to_idx += 1;
+                addr
+            };
+
+            match reconstruct_tx(
+                tx_type, tx_fields, chain_id, nonce, gas_limit, to_addr, y_parity, &sig_r, &sig_s,
+            ) {
+                Some(tx) => result.push(tx),
+                None => {
+                    tracing::debug!(tx_idx = i, tx_type = tx_type, "failed to reconstruct tx");
+                    result.push(Bytes::new());
+                }
+            }
+        }
+
+        result
+    }
 }
 
 /// Get a bit from a bitfield (little-endian bit order within each byte, per Kona)
@@ -417,43 +531,8 @@ fn get_bit(bits: &[u8], index: usize) -> bool {
     (bits[byte_idx] >> bit_idx) & 1 != 0
 }
 
-/// Decode SpanBatchTransactionData (tx_type + type-specific RLP)
-fn decode_span_tx_data(data: &[u8]) -> Option<(Bytes, &[u8])> {
-    if data.is_empty() {
-        return None;
-    }
-
-    let tx_type = data[0];
-    let mut cursor = &data[1..];
-    let start_len = cursor.len();
-
-    // Skip RLP elements based on tx_type
-    match tx_type {
-        0 => {
-            // Legacy: just value
-            cursor = skip_rlp_element(cursor)?;
-        }
-        1 => {
-            // EIP2930: value + access_list
-            cursor = skip_rlp_element(cursor)?; // value
-            cursor = skip_rlp_element(cursor)?; // access_list
-        }
-        2 | 3 => {
-            // EIP1559/EIP4844: value + max_priority_fee + max_fee + access_list
-            cursor = skip_rlp_element(cursor)?; // value
-            cursor = skip_rlp_element(cursor)?; // max_priority_fee
-            cursor = skip_rlp_element(cursor)?; // max_fee
-            cursor = skip_rlp_element(cursor)?; // access_list
-        }
-        _ => return None,
-    }
-
-    let consumed = 1 + (start_len - cursor.len());
-    let tx_data = Bytes::copy_from_slice(&data[..consumed]);
-    Some((tx_data, cursor))
-}
-
-/// Skip an RLP element and return the remaining slice
+/// Skip over a single RLP element (string or list) and return the remaining data.
+/// Returns None if the data is malformed or too short.
 fn skip_rlp_element(data: &[u8]) -> Option<&[u8]> {
     if data.is_empty() {
         return None;
@@ -461,19 +540,181 @@ fn skip_rlp_element(data: &[u8]) -> Option<&[u8]> {
 
     let first = data[0];
 
-    // Single byte (0x00-0x7f)
+    // Single byte value (0x00-0x7f)
     if first < 0x80 {
         return Some(&data[1..]);
     }
 
-    // Short string (0x80-0xb7)
+    // Short string (0x80-0xb7): length is first_byte - 0x80
+    if first <= 0xb7 {
+        let len = (first - 0x80) as usize;
+        if data.len() < 1 + len {
+            return None;
+        }
+        return Some(&data[1 + len..]);
+    }
+
+    // Long string (0xb8-0xbf): next (first_byte - 0xb7) bytes are the length
+    if first <= 0xbf {
+        let len_of_len = (first - 0xb7) as usize;
+        if data.len() < 1 + len_of_len {
+            return None;
+        }
+        let mut len = 0usize;
+        for i in 0..len_of_len {
+            len = (len << 8) | (data[1 + i] as usize);
+        }
+        if data.len() < 1 + len_of_len + len {
+            return None;
+        }
+        return Some(&data[1 + len_of_len + len..]);
+    }
+
+    // Short list (0xc0-0xf7): length is first_byte - 0xc0
+    if first <= 0xf7 {
+        let len = (first - 0xc0) as usize;
+        if data.len() < 1 + len {
+            return None;
+        }
+        return Some(&data[1 + len..]);
+    }
+
+    // Long list (0xf8-0xff): next (first_byte - 0xf7) bytes are the length
+    let len_of_len = (first - 0xf7) as usize;
+    if data.len() < 1 + len_of_len {
+        return None;
+    }
+    let mut len = 0usize;
+    for i in 0..len_of_len {
+        len = (len << 8) | (data[1 + i] as usize);
+    }
+    if data.len() < 1 + len_of_len + len {
+        return None;
+    }
+    Some(&data[1 + len_of_len + len..])
+}
+
+/// Reconstruct a full RLP-encoded transaction from span batch components.
+///
+/// tx_fields contains the type-specific RLP elements (value, fees, data, access_list)
+/// that were extracted during span batch encoding.
+fn reconstruct_tx(
+    tx_type: u8,
+    tx_fields: &[u8],
+    chain_id: u64,
+    nonce: u64,
+    gas_limit: u64,
+    to: Option<Address>,
+    y_parity: bool,
+    sig_r: &[u8; 32],
+    sig_s: &[u8; 32],
+) -> Option<Bytes> {
+    // Parse the type-specific fields from tx_fields
+    let cursor = tx_fields;
+
+    match tx_type {
+        0x00 => {
+            // Legacy: tx_fields = rlp(gas_price) || rlp(value) || rlp(data)
+            let (gas_price, rest) = decode_rlp_bytes(cursor)?;
+            let (value, rest) = decode_rlp_bytes(rest)?;
+            let (data, _) = decode_rlp_bytes(rest)?;
+
+            // v = chain_id * 2 + 35 + y_parity (EIP-155)
+            let v = chain_id * 2 + 35 + if y_parity { 1 } else { 0 };
+
+            // Build: rlp([nonce, gas_price, gas_limit, to, value, data, v, r, s])
+            let mut out = Vec::with_capacity(256);
+            encode_legacy_tx(
+                &mut out, nonce, &gas_price, gas_limit, to, &value, &data, v, sig_r, sig_s,
+            );
+            Some(Bytes::from(out))
+        }
+        0x02 => {
+            // EIP-1559: tx_fields = rlp(max_priority_fee) || rlp(max_fee) || rlp(value) ||
+            // rlp(data) || rlp(access_list)
+            let (max_priority_fee, rest) = decode_rlp_bytes(cursor)?;
+            let (max_fee, rest) = decode_rlp_bytes(rest)?;
+            let (value, rest) = decode_rlp_bytes(rest)?;
+            let (data, rest) = decode_rlp_bytes(rest)?;
+            let (access_list, _) = decode_rlp_bytes(rest)?;
+
+            // Build: 0x02 || rlp([chain_id, nonce, max_priority_fee, max_fee, gas_limit, to, value,
+            // data, access_list, y_parity, r, s])
+            let mut out = Vec::with_capacity(512);
+            out.push(0x02);
+            encode_eip1559_tx(
+                &mut out,
+                chain_id,
+                nonce,
+                &max_priority_fee,
+                &max_fee,
+                gas_limit,
+                to,
+                &value,
+                &data,
+                &access_list,
+                y_parity,
+                sig_r,
+                sig_s,
+            );
+            Some(Bytes::from(out))
+        }
+        0x01 => {
+            // EIP-2930: tx_fields = rlp(gas_price) || rlp(value) || rlp(data) || rlp(access_list)
+            let (gas_price, rest) = decode_rlp_bytes(cursor)?;
+            let (value, rest) = decode_rlp_bytes(rest)?;
+            let (data, rest) = decode_rlp_bytes(rest)?;
+            let (access_list, _) = decode_rlp_bytes(rest)?;
+
+            let mut out = Vec::with_capacity(512);
+            out.push(0x01);
+            encode_eip2930_tx(
+                &mut out,
+                chain_id,
+                nonce,
+                &gas_price,
+                gas_limit,
+                to,
+                &value,
+                &data,
+                &access_list,
+                y_parity,
+                sig_r,
+                sig_s,
+            );
+            Some(Bytes::from(out))
+        }
+        _ => {
+            tracing::debug!(tx_type = tx_type, "unsupported tx type for reconstruction");
+            None
+        }
+    }
+}
+
+/// Decode a single RLP element and return (raw_bytes_including_header, remaining)
+fn decode_rlp_bytes(data: &[u8]) -> Option<(&[u8], &[u8])> {
+    if data.is_empty() {
+        return Some((&[], data));
+    }
+
+    let first = data[0];
+
+    // Single byte value (0x00-0x7f)
+    if first < 0x80 {
+        return Some((&data[..1], &data[1..]));
+    }
+
+    // Short string (0x80-0xb7): length is first - 0x80
     if first <= 0xb7 {
         let len = (first - 0x80) as usize;
         let total = 1 + len;
-        return data.get(total..).or(None);
+        if data.len() < total {
+            return None;
+        }
+        return Some((&data[..total], &data[total..]));
     }
 
-    // Long string (0xb8-0xbf)
+    // Long string (0xb8-0xbf): next (first - 0xb7) bytes are the length
     if first <= 0xbf {
         let len_of_len = (first - 0xb7) as usize;
         if data.len() < 1 + len_of_len {
@@ -483,17 +724,23 @@ fn skip_rlp_element(data: &[u8]) -> Option<&[u8]> {
         len_bytes[8 - len_of_len..].copy_from_slice(&data[1..1 + len_of_len]);
         let len = u64::from_be_bytes(len_bytes) as usize;
         let total = 1 + len_of_len + len;
-        return data.get(total..).or(None);
+        if data.len() < total {
+            return None;
+        }
+        return Some((&data[..total], &data[total..]));
     }
 
-    // Short list (0xc0-0xf7)
+    // Short list (0xc0-0xf7): length is first - 0xc0
     if first <= 0xf7 {
         let len = (first - 0xc0) as usize;
         let total = 1 + len;
-        return data.get(total..).or(None);
+        if data.len() < total {
+            return None;
+        }
+        return Some((&data[..total], &data[total..]));
     }
 
-    // Long list (0xf8-0xff)
+    // Long list (0xf8-0xff): next (first - 0xf7) bytes are the length
     let len_of_len = (first - 0xf7) as usize;
     if data.len() < 1 + len_of_len {
         return None;
@@ -502,5 +749,178 @@ fn skip_rlp_element(data: &[u8]) -> Option<&[u8]> {
     len_bytes[8 - len_of_len..].copy_from_slice(&data[1..1 + len_of_len]);
     let len = u64::from_be_bytes(len_bytes) as usize;
     let total = 1 + len_of_len + len;
-    data.get(total..).or(None)
+    if data.len() < total {
+        return None;
+    }
+    Some((&data[..total], &data[total..]))
+}
+
+fn to_rlp_len(to: Option<Address>) -> usize {
+    match to {
+        Some(_) => 21, // 0x94 + 20 bytes
+        None => 1,     // 0x80 (empty string)
+    }
+}
+
+fn encode_to(out: &mut Vec<u8>, to: Option<Address>) {
+    match to {
+        Some(addr) => {
+            out.push(0x80 + 20); // string of 20 bytes
+            out.extend_from_slice(addr.as_slice());
+        }
+        None => {
+            out.push(0x80); // empty string
+        }
+    }
+}
+
+fn encode_u256_bytes(out: &mut Vec<u8>, value: &[u8; 32]) {
+    // Strip leading zeros
+    let first_nonzero = value.iter().position(|&b| b != 0).unwrap_or(32);
+    let trimmed = &value[first_nonzero..];
+
+    if trimmed.is_empty() {
+        out.push(0x80); // empty = 0
+    } else if trimmed.len() == 1 && trimmed[0] < 0x80 {
+        out.push(trimmed[0]); // single byte
+    } else {
+        out.push(0x80 + trimmed.len() as u8);
+        out.extend_from_slice(trimmed);
+    }
+}
+
+fn encode_legacy_tx(
+    out: &mut Vec<u8>,
+    nonce: u64,
+    gas_price: &[u8],
+    gas_limit: u64,
+    to: Option<Address>,
+    value: &[u8],
+    data: &[u8],
+    v: u64,
+    r: &[u8; 32],
+    s: &[u8; 32],
+) {
+    use alloy_rlp::Encodable;
+
+    // Calculate payload length
+    let payload_len = nonce.length() +
+        gas_price.len() +
+        gas_limit.length() +
+        to_rlp_len(to) +
+        value.len() +
+        data.len() +
+        v.length() +
+        33 +
+        33;
+
+    // Encode list header
+    alloy_rlp::Header { list: true, payload_length: payload_len }.encode(out);
+
+    // Encode fields
+    nonce.encode(out);
+    out.extend_from_slice(gas_price);
+    gas_limit.encode(out);
+    encode_to(out, to);
+    out.extend_from_slice(value);
+    out.extend_from_slice(data);
+    v.encode(out);
+    encode_u256_bytes(out, r);
+    encode_u256_bytes(out, s);
+}
+
+fn encode_eip1559_tx(
+    out: &mut Vec<u8>,
+    chain_id: u64,
+    nonce: u64,
+    max_priority_fee: &[u8],
+    max_fee: &[u8],
+    gas_limit: u64,
+    to: Option<Address>,
+    value: &[u8],
+    data: &[u8],
+    access_list: &[u8],
+    y_parity: bool,
+    r: &[u8; 32],
+    s: &[u8; 32],
+) {
+    use alloy_rlp::Encodable;
+
+    let y_parity_val: u8 = if y_parity { 1 } else { 0 };
+
+    // Calculate payload length
+    let payload_len = chain_id.length() +
+        nonce.length() +
+        max_priority_fee.len() +
+        max_fee.len() +
+        gas_limit.length() +
+        to_rlp_len(to) +
+        value.len() +
+        data.len() +
+        access_list.len() +
+        y_parity_val.length() +
+        33 +
+        33;
+
+    // Encode list header
+    alloy_rlp::Header { list: true, payload_length: payload_len }.encode(out);
+
+    // Encode fields
+    chain_id.encode(out);
+    nonce.encode(out);
+    out.extend_from_slice(max_priority_fee);
+    out.extend_from_slice(max_fee);
+    gas_limit.encode(out);
+    encode_to(out, to);
+    out.extend_from_slice(value);
+    out.extend_from_slice(data);
+    out.extend_from_slice(access_list);
+    y_parity_val.encode(out);
+    encode_u256_bytes(out, r);
+    encode_u256_bytes(out, s);
+}
+
+fn encode_eip2930_tx(
+    out: &mut Vec<u8>,
+    chain_id: u64,
+    nonce: u64,
+    gas_price: &[u8],
+    gas_limit: u64,
+    to: Option<Address>,
+    value: &[u8],
+    data: &[u8],
+    access_list: &[u8],
+    y_parity: bool,
+    r: &[u8; 32],
+    s: &[u8; 32],
+) {
+    use alloy_rlp::Encodable;
+
+    let y_parity_val: u8 = if y_parity { 1 } else { 0 };
+
+    let payload_len = chain_id.length() +
+        nonce.length() +
+        gas_price.len() +
+        gas_limit.length() +
+        to_rlp_len(to) +
+        value.len() +
+        data.len() +
+        access_list.len() +
+        y_parity_val.length() +
+        33 +
+        33;
+
+    alloy_rlp::Header { list: true, payload_length: payload_len }.encode(out);
+
+    chain_id.encode(out);
+    nonce.encode(out);
+    out.extend_from_slice(gas_price);
+    gas_limit.encode(out);
+    encode_to(out, to);
+    out.extend_from_slice(value);
+    out.extend_from_slice(data);
+    out.extend_from_slice(access_list);
+    y_parity_val.encode(out);
+    encode_u256_bytes(out, r);
+    encode_u256_bytes(out, s);
 }

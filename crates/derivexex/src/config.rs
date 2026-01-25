@@ -17,6 +17,13 @@ pub const SYSTEM_CONFIG: Address = address!("c407398d063f942febbcc6f80a156b47f3f
 pub const BASE_FEE_SCALAR: u32 = 2000;
 pub const BLOB_BASE_FEE_SCALAR: u32 = 900_000;
 
+/// Unichain L2 genesis timestamp (block 0).
+/// Fetched from: https://mainnet.unichain.org eth_getBlockByNumber("0x0")
+pub const L2_GENESIS_TIME: u64 = 1730748359; // 2024-11-04 19:25:59 UTC
+
+/// Unichain L2 block time in seconds.
+pub const L2_BLOCK_TIME: u64 = 1;
+
 #[derive(Debug, Clone)]
 pub struct UnichainConfig {
     pub batch_inbox: Address,

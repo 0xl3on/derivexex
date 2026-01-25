@@ -13,6 +13,7 @@ alloy-rlp = { workspace = true }
 alloy-sol-types = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+serde = { workspace = true }
 miniz_oxide = { workspace = true }
 brotli = { workspace = true }
 unsigned-varint = { workspace = true }

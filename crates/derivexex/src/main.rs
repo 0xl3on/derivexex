@@ -5,7 +5,9 @@ mod providers;
 use alloy_consensus::{BlockHeader, Transaction};
 use alloy_eips::eip4844::{calc_blob_gasprice, Blob};
 use alloy_primitives::{B256, U256};
-use config::{UnichainConfig, BASE_FEE_SCALAR, BLOB_BASE_FEE_SCALAR};
+use config::{
+    UnichainConfig, BASE_FEE_SCALAR, BLOB_BASE_FEE_SCALAR, L2_BLOCK_TIME, L2_GENESIS_TIME,
+};
 use derivexex_pipeline::{
     decode_blob_data_into, max_blob_data_size, Channel, ChannelAssembler, ChannelFrame,
     DepositedTransaction, Deriver, DeriverConfig, EpochInfo, FrameDecoder, Hardfork, L1BlockRef,
@@ -200,6 +202,8 @@ where
         batcher_addr,
         base_fee_scalar: BASE_FEE_SCALAR,
         blob_base_fee_scalar: BLOB_BASE_FEE_SCALAR,
+        l2_genesis_time: L2_GENESIS_TIME,
+        l2_block_time: L2_BLOCK_TIME,
     };
     let mut pipeline = DerivationPipeline::new(blob_provider, deriver_config, starting_l2_block);
 

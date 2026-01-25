@@ -2759,6 +2759,7 @@ dependencies = [
  "brotli 7.0.0",
  "hex",
  "miniz_oxide",
+ "serde",
  "thiserror 2.0.17",
  "tracing",
  "unsigned-varint",

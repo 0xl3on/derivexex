@@ -17,6 +17,7 @@
 //! - Deposits only go in the first L2 block of an epoch (sequence_number = 0)
 
 use alloy_primitives::{Bytes, B256};
+use serde::Serialize;
 
 use crate::{
     deposits::DepositedTransaction,
@@ -24,7 +25,7 @@ use crate::{
 };
 
 /// Reference to an L1 block (the "origin" of derived L2 blocks).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct L1BlockRef {
     pub number: u64,
     pub hash: B256,
@@ -32,7 +33,7 @@ pub struct L1BlockRef {
 }
 
 /// A transaction in an L2 block (either deposit or sequencer tx).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum L2Transaction {
     /// Deposit transaction (type 0x7E) - includes L1 info and user deposits
     Deposit(DepositedTransaction),
@@ -168,7 +169,7 @@ pub enum BlockBuildError {
 }
 
 /// A derived L2 block ready for execution.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct L2Block {
     /// L2 block number
     pub number: u64,

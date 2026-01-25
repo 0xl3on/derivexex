@@ -7,6 +7,7 @@ mod encode;
 mod parse;
 
 use alloy_primitives::{Address, Bytes, B256, U256};
+use serde::Serialize;
 use thiserror::Error;
 
 pub use encode::DEPOSIT_TX_TYPE;
@@ -26,7 +27,7 @@ pub enum DepositError {
 ///
 /// Created by parsing `TransactionDeposited` events from the OptimismPortal contract.
 /// Can be encoded to the L2 deposit transaction format (type 0x7E) for block reconstruction.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct DepositedTransaction {
     pub source_hash: B256,
     pub from: Address,
