@@ -67,7 +67,7 @@ pub fn tx_hash(tx: &DepositedTransaction) -> B256 {
 /// Trim leading zero bytes from a big-endian encoded integer.
 /// Returns empty slice for zero values.
 #[inline]
-fn trim_leading_zeros(bytes: &[u8]) -> &[u8] {
+pub(crate) fn trim_leading_zeros(bytes: &[u8]) -> &[u8] {
     match bytes.iter().position(|&b| b != 0) {
         Some(idx) => &bytes[idx..],
         None => &[],
@@ -127,64 +127,5 @@ fn encode_string(out: &mut Vec<u8>, data: &[u8]) {
         out.push(0xB7 + len_bytes as u8);
         out.extend_from_slice(&len.to_be_bytes()[8 - len_bytes..]);
         out.extend_from_slice(data);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use alloy_primitives::{address, Address, Bytes, U256};
-
-    #[test]
-    fn test_trim_leading_zeros() {
-        assert_eq!(trim_leading_zeros(&[0, 0, 0, 1]), &[1]);
-        assert_eq!(trim_leading_zeros(&[0, 0, 1, 0]), &[1, 0]);
-        assert_eq!(trim_leading_zeros(&[1, 2, 3]), &[1, 2, 3]);
-        //assert_eq!(trim_leading_zeros(&[0, 0, 0, 0]), &[]);
-        //assert_eq!(trim_leading_zeros(&[]), &[]);
-    }
-
-    #[test]
-    fn test_encode_starts_with_type() {
-        let tx = DepositedTransaction {
-            source_hash: B256::ZERO,
-            from: Address::ZERO,
-            to: Some(Address::ZERO),
-            mint: U256::ZERO,
-            value: U256::ZERO,
-            gas_limit: 21000,
-            is_system_tx: false,
-            data: Bytes::new(),
-        };
-
-        let mut buf = Vec::new();
-        encode_deposit_tx(&tx, &mut buf);
-
-        assert_eq!(buf[0], DEPOSIT_TX_TYPE);
-    }
-
-    #[test]
-    fn test_contract_creation_empty_to() {
-        let tx = DepositedTransaction {
-            source_hash: B256::repeat_byte(0x11),
-            from: address!("1111111111111111111111111111111111111111"),
-            to: None, // Contract creation
-            mint: U256::from(1000),
-            value: U256::ZERO,
-            gas_limit: 100_000,
-            is_system_tx: false,
-            data: Bytes::from_static(&[0x60, 0x80, 0x60, 0x40]), // Sample bytecode
-        };
-
-        let mut buf = Vec::new();
-        encode_deposit_tx(&tx, &mut buf);
-
-        // Should encode successfully
-        assert!(buf.len() > 1);
-
-        // Hash should be deterministic
-        let hash1 = tx_hash(&tx);
-        let hash2 = tx_hash(&tx);
-        assert_eq!(hash1, hash2);
     }
 }

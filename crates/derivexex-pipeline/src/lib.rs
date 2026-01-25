@@ -9,10 +9,14 @@
 mod batch;
 mod block;
 mod channel;
-mod deposits;
 mod derive;
 mod frame;
-mod l1_info;
+
+pub(crate) mod deposits;
+pub(crate) mod l1_info;
+
+#[cfg(test)]
+mod tests;
 
 pub use batch::{Batch, BatchError, SingleBatch, SpanBatch, SpanBatchElement};
 pub use block::{BlockBuildError, L1BlockRef, L2Block, L2BlockBuilder, L2Transaction};
