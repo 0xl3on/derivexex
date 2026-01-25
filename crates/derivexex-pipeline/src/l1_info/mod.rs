@@ -196,6 +196,7 @@ impl L1BlockInfo {
     ///
     /// This creates the L1 attributes deposited transaction that must be
     /// the first transaction in every L2 block.
+    /// Example: https://unichain.blockscout.com/tx/0x0c5cbaf6631111c2747333f21a781ccdce3e6c4529f0fc68e678a558d3d859f1
     pub fn to_deposit_tx(&self, hardfork: Hardfork) -> DepositedTransaction {
         DepositedTransaction {
             source_hash: self.source_hash(),

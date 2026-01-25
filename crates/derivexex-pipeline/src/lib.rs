@@ -7,12 +7,14 @@
 //! - Batch decoding (SingleBatch and SpanBatch formats)
 
 mod batch;
+mod block;
 mod channel;
 mod deposits;
 mod frame;
 mod l1_info;
 
 pub use batch::{Batch, BatchError, SingleBatch, SpanBatch, SpanBatchElement};
+pub use block::{BlockBuildError, L1BlockRef, L2Block, L2BlockBuilder, L2Transaction};
 pub use channel::{Channel, ChannelAssembler, ChannelError};
 pub use deposits::{
     DepositError, DepositedTransaction, DEPOSIT_TX_TYPE, TRANSACTION_DEPOSITED_TOPIC,
