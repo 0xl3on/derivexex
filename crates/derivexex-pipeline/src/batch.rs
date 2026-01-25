@@ -33,6 +33,38 @@ impl From<u8> for BatchType {
     }
 }
 
+/// EIP-2718 transaction type identifiers
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum TxType {
+    /// Legacy transaction (pre-EIP-2718)
+    Legacy = 0x00,
+    /// EIP-2930: Access list transaction
+    Eip2930 = 0x01,
+    /// EIP-1559: Dynamic fee transaction
+    Eip1559 = 0x02,
+    /// EIP-4844: Blob transaction (not used in L2)
+    Eip4844 = 0x03,
+    /// EIP-7702: Set code transaction
+    Eip7702 = 0x04,
+}
+
+impl TxType {
+    /// Try to parse a transaction type from a byte.
+    /// Returns None for legacy transactions (which start with RLP list prefix >= 0xc0)
+    pub fn from_first_byte(byte: u8) -> Option<Self> {
+        match byte {
+            0x01 => Some(TxType::Eip2930),
+            0x02 => Some(TxType::Eip1559),
+            0x03 => Some(TxType::Eip4844),
+            0x04 => Some(TxType::Eip7702),
+            // >= 0xc0 is RLP list prefix, indicating legacy tx
+            b if b >= 0xc0 => None,
+            _ => None,
+        }
+    }
+}
+
 /// A decoded batch - either Single or Span
 #[derive(Debug, Clone)]
 pub enum Batch {
@@ -223,6 +255,12 @@ impl SpanBatch {
             cursor = rest;
         }
 
+        tracing::debug!(
+            block_count = block_count,
+            total_tx_count = total_tx_count,
+            "span batch: decoded block counts"
+        );
+
         // --- SpanBatchTransactions (columnar format) ---
         let txs = SpanBatchTransactions::decode(cursor, total_tx_count)?;
 
@@ -346,14 +384,13 @@ impl SpanBatchTransactions {
         }
 
         // 5. tx_data: Concatenated transaction payloads
-        // Each tx is: tx_type || type_specific_rlp_fields
-        // - Legacy (type 0x00): gas_price || value || data
-        // - EIP-2930 (type 0x01): gas_price || value || data || access_list
-        // - EIP-1559 (type 0x02): max_priority_fee || max_fee || value || data || access_list
+        // Per OP spec, tx_datas contains RLP-encoded transaction fields:
+        // - Legacy: rlp_encode(value, gasPrice, data) - ONE RLP list
+        // - Typed: type_byte ++ rlp_encode(fields...)
         let mut tx_data = Vec::with_capacity(total_tx_count);
         for i in 0..total_tx_count {
             if cursor.is_empty() {
-                tracing::debug!(tx_idx = i, "cursor empty, filling rest with empty");
+                // Out of tx_data - fill remaining with empty
                 for _ in i..total_tx_count {
                     tx_data.push(Bytes::new());
                 }
@@ -363,51 +400,29 @@ impl SpanBatchTransactions {
             let start = cursor;
             let first_byte = cursor[0];
 
-            // Determine tx type and how many RLP elements to skip
-            // For typed txs (0x01, 0x02, 0x03): type byte + one RLP list containing all fields
-            // For legacy txs (first byte >= 0x80 OR small value 0x04-0x7f): 3 individual RLP
-            // elements
-            let valid;
-            if first_byte >= 0x01 && first_byte <= 0x03 {
-                // Typed tx: type byte + one RLP list
+            // Determine tx type and skip the appropriate RLP structure
+            let valid = if let Some(_tx_type) = TxType::from_first_byte(first_byte) {
+                // Typed tx: type byte + ONE RLP list
                 cursor = &cursor[1..]; // consume type byte
-                match skip_rlp_element(cursor) {
-                    Some(rest) => {
-                        cursor = rest;
-                        valid = true;
-                    }
-                    None => {
-                        valid = false;
-                    }
-                }
-            } else if first_byte >= 0x80 ||
-                first_byte == 0x00 ||
-                (first_byte >= 0x04 && first_byte <= 0x7f)
-            {
-                // Legacy tx: 3 individual RLP elements (gas_price, value, data)
-                // Note: first_byte 0x04-0x7f could be a small gas_price value
-                valid = skip_rlp_element(cursor)
-                    .and_then(|c| skip_rlp_element(c))
-                    .and_then(|c| skip_rlp_element(c))
+                skip_rlp_element(cursor)
                     .map(|rest| cursor = rest)
-                    .is_some();
+                    .is_some()
+            } else if first_byte >= 0xc0 {
+                // Legacy tx: starts with RLP list prefix (0xc0-0xff)
+                skip_rlp_element(cursor)
+                    .map(|rest| cursor = rest)
+                    .is_some()
             } else {
-                // Shouldn't happen, but handle gracefully
-                valid = false;
-            }
+                // Unexpected byte - not a valid tx_data start
+                false
+            };
 
             if valid {
                 let consumed = start.len() - cursor.len();
                 tx_data.push(Bytes::copy_from_slice(&start[..consumed]));
             } else {
                 // Parsing failed - we've likely reached end of tx_datas section.
-                // The remaining bytes are probably protected_bits/tx_types.
                 // Fill remaining with empty and stop parsing.
-                tracing::debug!(
-                    tx_idx = i,
-                    remaining_txs = total_tx_count - i,
-                    "reached end of tx_datas, filling remaining with empty"
-                );
                 for _ in i..total_tx_count {
                     tx_data.push(Bytes::new());
                 }
@@ -485,13 +500,10 @@ impl SpanBatchTransactions {
 
             let first_byte = tx_bytes[0];
 
-            // Determine tx type and fields:
-            // - 0x01, 0x02, 0x03: typed tx (type prefix + RLP list)
-            // - 0x00, 0x04-0x7f, 0x80+: legacy tx (starts with gas_price, no type prefix)
-            let (tx_type, tx_fields) = if first_byte >= 0x01 && first_byte <= 0x03 {
-                (first_byte, &tx_bytes[1..])
-            } else {
-                (0x00u8, tx_bytes.as_ref())
+            // Determine tx type and fields
+            let (tx_type, tx_fields) = match TxType::from_first_byte(first_byte) {
+                Some(t) => (t, &tx_bytes[1..]),       // Typed tx: skip type byte
+                None => (TxType::Legacy, tx_bytes.as_ref()), // Legacy: no type prefix
             };
 
             let nonce = self.nonces.get(i).copied().unwrap_or(0);
@@ -513,7 +525,7 @@ impl SpanBatchTransactions {
             ) {
                 Some(tx) => result.push(tx),
                 None => {
-                    tracing::debug!(tx_idx = i, tx_type = tx_type, "failed to reconstruct tx");
+                    tracing::debug!(tx_idx = i, tx_type = ?tx_type, "failed to reconstruct tx");
                     result.push(Bytes::new());
                 }
             }
@@ -523,12 +535,17 @@ impl SpanBatchTransactions {
     }
 }
 
-/// Get a bit from a bitfield (little-endian bit order within each byte, per Kona)
-#[inline]
+/// Get a bit from a span batch bitlist.
+/// Per OP Stack spec: "standard bitlists are encoded as big-endian integers,
+/// left-padded with zeroes to the next multiple of 8 bits."
+/// Go's big.Int.Bit(i) returns bit i counting from LSB (rightmost).
+/// So bit 0 is the LSB (rightmost bit of the last byte).
 fn get_bit(bits: &[u8], index: usize) -> bool {
-    let byte_idx = index / 8;
-    let bit_idx = index % 8;
-    (bits[byte_idx] >> bit_idx) & 1 != 0
+    let total_bits = bits.len() * 8;
+    let bit_from_msb = total_bits - 1 - index; // convert LSB index to MSB position
+    let byte_idx = bit_from_msb / 8;
+    let bit_in_byte = 7 - (bit_from_msb % 8);
+    (bits[byte_idx] >> bit_in_byte) & 1 != 0
 }
 
 /// Skip over a single RLP element (string or list) and return the remaining data.
@@ -599,7 +616,7 @@ fn skip_rlp_element(data: &[u8]) -> Option<&[u8]> {
 /// tx_fields contains the type-specific RLP elements (value, fees, data, access_list)
 /// that were extracted during span batch encoding.
 fn reconstruct_tx(
-    tx_type: u8,
+    tx_type: TxType,
     tx_fields: &[u8],
     chain_id: u64,
     nonce: u64,
@@ -613,10 +630,12 @@ fn reconstruct_tx(
     let cursor = tx_fields;
 
     match tx_type {
-        0x00 => {
-            // Legacy: tx_fields = rlp(gas_price) || rlp(value) || rlp(data)
-            let (gas_price, rest) = decode_rlp_bytes(cursor)?;
-            let (value, rest) = decode_rlp_bytes(rest)?;
+        TxType::Legacy => {
+            // Legacy: tx_fields = rlp([value, gasPrice, data])
+            // Note: value comes FIRST in span batch format
+            let inner = unwrap_rlp_list(cursor)?;
+            let (value, rest) = decode_rlp_bytes(inner)?;
+            let (gas_price, rest) = decode_rlp_bytes(rest)?;
             let (data, _) = decode_rlp_bytes(rest)?;
 
             // v = chain_id * 2 + 35 + y_parity (EIP-155)
@@ -629,19 +648,20 @@ fn reconstruct_tx(
             );
             Some(Bytes::from(out))
         }
-        0x02 => {
-            // EIP-1559: tx_fields = rlp(max_priority_fee) || rlp(max_fee) || rlp(value) ||
-            // rlp(data) || rlp(access_list)
-            let (max_priority_fee, rest) = decode_rlp_bytes(cursor)?;
+        TxType::Eip1559 => {
+            // EIP-1559: tx_fields = rlp([value, max_priority_fee, max_fee, data, access_list])
+            // Note: value comes FIRST in span batch format (different from standard tx encoding)
+            let inner = unwrap_rlp_list(cursor)?;
+            let (value, rest) = decode_rlp_bytes(inner)?;
+            let (max_priority_fee, rest) = decode_rlp_bytes(rest)?;
             let (max_fee, rest) = decode_rlp_bytes(rest)?;
-            let (value, rest) = decode_rlp_bytes(rest)?;
             let (data, rest) = decode_rlp_bytes(rest)?;
             let (access_list, _) = decode_rlp_bytes(rest)?;
 
             // Build: 0x02 || rlp([chain_id, nonce, max_priority_fee, max_fee, gas_limit, to, value,
             // data, access_list, y_parity, r, s])
             let mut out = Vec::with_capacity(512);
-            out.push(0x02);
+            out.push(TxType::Eip1559 as u8);
             encode_eip1559_tx(
                 &mut out,
                 chain_id,
@@ -659,15 +679,17 @@ fn reconstruct_tx(
             );
             Some(Bytes::from(out))
         }
-        0x01 => {
-            // EIP-2930: tx_fields = rlp(gas_price) || rlp(value) || rlp(data) || rlp(access_list)
-            let (gas_price, rest) = decode_rlp_bytes(cursor)?;
-            let (value, rest) = decode_rlp_bytes(rest)?;
+        TxType::Eip2930 => {
+            // EIP-2930: tx_fields = rlp([value, gas_price, data, access_list])
+            // Note: value comes FIRST in span batch format (different from standard tx encoding)
+            let inner = unwrap_rlp_list(cursor)?;
+            let (value, rest) = decode_rlp_bytes(inner)?;
+            let (gas_price, rest) = decode_rlp_bytes(rest)?;
             let (data, rest) = decode_rlp_bytes(rest)?;
             let (access_list, _) = decode_rlp_bytes(rest)?;
 
             let mut out = Vec::with_capacity(512);
-            out.push(0x01);
+            out.push(TxType::Eip2930 as u8);
             encode_eip2930_tx(
                 &mut out,
                 chain_id,
@@ -684,11 +706,82 @@ fn reconstruct_tx(
             );
             Some(Bytes::from(out))
         }
-        _ => {
-            tracing::debug!(tx_type = tx_type, "unsupported tx type for reconstruction");
+        TxType::Eip7702 => {
+            // EIP-7702 (Set Code Transaction)
+            // tx_fields = rlp([value, max_priority_fee, max_fee, data, access_list, authorization_list])
+            let inner = unwrap_rlp_list(cursor)?;
+            let (value, rest) = decode_rlp_bytes(inner)?;
+            let (max_priority_fee, rest) = decode_rlp_bytes(rest)?;
+            let (max_fee, rest) = decode_rlp_bytes(rest)?;
+            let (data, rest) = decode_rlp_bytes(rest)?;
+            let (access_list, rest) = decode_rlp_bytes(rest)?;
+            let (authorization_list, _) = decode_rlp_bytes(rest)?;
+
+            let mut out = Vec::with_capacity(1024);
+            out.push(TxType::Eip7702 as u8);
+            encode_eip7702_tx(
+                &mut out,
+                chain_id,
+                nonce,
+                &max_priority_fee,
+                &max_fee,
+                gas_limit,
+                to,
+                &value,
+                &data,
+                &access_list,
+                &authorization_list,
+                y_parity,
+                sig_r,
+                sig_s,
+            );
+            Some(Bytes::from(out))
+        }
+        TxType::Eip4844 => {
+            // EIP-4844 blob transactions are not used in L2
+            // Because blob transactions only exist in L1
+            tracing::debug!("EIP-4844 blob tx not supported in L2");
             None
         }
     }
+}
+
+/// Unwrap an RLP list and return a slice to its contents.
+/// For span batch typed txs, the fields are wrapped in a list.
+fn unwrap_rlp_list(data: &[u8]) -> Option<&[u8]> {
+    if data.is_empty() {
+        return None;
+    }
+
+    let first = data[0];
+
+    // Short list (0xc0-0xf7): length is first - 0xc0
+    if first >= 0xc0 && first <= 0xf7 {
+        let len = (first - 0xc0) as usize;
+        if data.len() < 1 + len {
+            return None;
+        }
+        return Some(&data[1..1 + len]);
+    }
+
+    // Long list (0xf8-0xff): next (first - 0xf7) bytes are the length
+    if first >= 0xf8 {
+        let len_of_len = (first - 0xf7) as usize;
+        if data.len() < 1 + len_of_len {
+            return None;
+        }
+        let mut len = 0usize;
+        for i in 0..len_of_len {
+            len = (len << 8) | (data[1 + i] as usize);
+        }
+        if data.len() < 1 + len_of_len + len {
+            return None;
+        }
+        return Some(&data[1 + len_of_len..1 + len_of_len + len]);
+    }
+
+    // Not a list
+    None
 }
 
 /// Decode a single RLP element and return (raw_bytes_including_header, remaining)
@@ -920,6 +1013,59 @@ fn encode_eip2930_tx(
     out.extend_from_slice(value);
     out.extend_from_slice(data);
     out.extend_from_slice(access_list);
+    y_parity_val.encode(out);
+    encode_u256_bytes(out, r);
+    encode_u256_bytes(out, s);
+}
+
+fn encode_eip7702_tx(
+    out: &mut Vec<u8>,
+    chain_id: u64,
+    nonce: u64,
+    max_priority_fee: &[u8],
+    max_fee: &[u8],
+    gas_limit: u64,
+    to: Option<Address>,
+    value: &[u8],
+    data: &[u8],
+    access_list: &[u8],
+    authorization_list: &[u8],
+    y_parity: bool,
+    r: &[u8; 32],
+    s: &[u8; 32],
+) {
+    use alloy_rlp::Encodable;
+
+    let y_parity_val: u8 = if y_parity { 1 } else { 0 };
+
+    // EIP-7702: [chain_id, nonce, max_priority_fee, max_fee, gas_limit, to, value,
+    //            data, access_list, authorization_list, y_parity, r, s]
+    let payload_len = chain_id.length()
+        + nonce.length()
+        + max_priority_fee.len()
+        + max_fee.len()
+        + gas_limit.length()
+        + to_rlp_len(to)
+        + value.len()
+        + data.len()
+        + access_list.len()
+        + authorization_list.len()
+        + y_parity_val.length()
+        + 33
+        + 33;
+
+    alloy_rlp::Header { list: true, payload_length: payload_len }.encode(out);
+
+    chain_id.encode(out);
+    nonce.encode(out);
+    out.extend_from_slice(max_priority_fee);
+    out.extend_from_slice(max_fee);
+    gas_limit.encode(out);
+    encode_to(out, to);
+    out.extend_from_slice(value);
+    out.extend_from_slice(data);
+    out.extend_from_slice(access_list);
+    out.extend_from_slice(authorization_list);
     y_parity_val.encode(out);
     encode_u256_bytes(out, r);
     encode_u256_bytes(out, s);
