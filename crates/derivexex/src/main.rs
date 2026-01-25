@@ -4,12 +4,11 @@ mod providers;
 
 use alloy_consensus::{BlockHeader, Transaction};
 use alloy_eips::eip4844::{calc_blob_gasprice, Blob};
-use alloy_primitives::{Address, Bytes, B256, U256};
-use alloy_rlp::Decodable;
+use alloy_primitives::{B256, U256};
 use config::{UnichainConfig, BASE_FEE_SCALAR, BLOB_BASE_FEE_SCALAR};
 use derivexex_pipeline::{
-    decode_blob_data_into, max_blob_data_size, Batch, Channel, ChannelAssembler, ChannelFrame,
-    DepositedTransaction, FrameDecoder, Hardfork, L1BlockInfo, L1BlockRef, L2Block, L2BlockBuilder,
+    decode_blob_data_into, max_blob_data_size, Channel, ChannelAssembler, ChannelFrame,
+    DepositedTransaction, Deriver, DeriverConfig, EpochInfo, FrameDecoder, Hardfork, L1BlockRef,
     TRANSACTION_DEPOSITED_TOPIC,
 };
 use futures::Future;
@@ -20,7 +19,7 @@ use reth::{api::FullNodeComponents, builder::NodeTypes, primitives::EthPrimitive
 use reth_exex::{ExExContext, ExExEvent, ExExNotification};
 use reth_node_ethereum::EthereumNode;
 use reth_tracing::tracing;
-use std::{collections::HashMap, path::PathBuf};
+use std::path::PathBuf;
 
 #[derive(Debug, Default, Clone)]
 struct DerivationTracker {
@@ -61,60 +60,39 @@ impl DerivationTracker {
     }
 }
 
-/// Wrapper around the pipeline crate's functionality with blob fetching
+/// Wrapper around the pipeline crate's functionality with blob fetching.
 struct DerivationPipeline<B: BlobProvider> {
     blob_provider: B,
     assembler: ChannelAssembler,
     /// Reusable buffer for blob decoding to avoid 130KB allocation per blob
     blob_decode_buf: Vec<u8>,
-    /// L2 block builder for constructing derived blocks
-    block_builder: L2BlockBuilder,
-    /// Pending deposits per L1 block number (epoch)
-    epoch_deposits: HashMap<u64, Vec<DepositedTransaction>>,
-    /// L1 block info per block number for creating L1 attributes deposits
-    epoch_info: HashMap<u64, EpochInfo>,
-}
-
-/// L1 block information needed for L2 block building.
-#[derive(Debug, Clone)]
-struct EpochInfo {
-    l1_ref: L1BlockRef,
-    basefee: U256,
-    /// Blob base fee calculated from excess_blob_gas via EIP-4844 formula
-    blob_basefee: U256,
+    /// High-level deriver for channel → L2 blocks
+    deriver: Deriver,
 }
 
 impl<B: BlobProvider> DerivationPipeline<B> {
-    fn new(blob_provider: B, starting_l2_block: u64) -> Self {
+    fn new(blob_provider: B, config: DeriverConfig, starting_l2_block: u64) -> Self {
         Self {
             blob_provider,
             assembler: ChannelAssembler::new(),
-            // Pre-allocate the decode buffer once, reused for all blobs
             blob_decode_buf: vec![0u8; max_blob_data_size()],
-            block_builder: L2BlockBuilder::new(Hardfork::Ecotone, starting_l2_block),
-            epoch_deposits: HashMap::new(),
-            epoch_info: HashMap::new(),
+            deriver: Deriver::new(config, starting_l2_block),
         }
     }
 
     /// Add a deposit for a specific L1 block (epoch).
     fn add_deposit(&mut self, l1_block_number: u64, deposit: DepositedTransaction) {
-        self.epoch_deposits.entry(l1_block_number).or_default().push(deposit);
+        self.deriver.add_deposit(l1_block_number, deposit);
     }
 
     /// Register L1 block info for an epoch.
     fn register_epoch(&mut self, l1_block_number: u64, info: EpochInfo) {
-        self.epoch_info.insert(l1_block_number, info);
+        self.deriver.register_epoch(l1_block_number, info);
     }
 
-    /// Get deposits for an epoch, removing them from the pending map.
-    fn take_epoch_deposits(&mut self, l1_block_number: u64) -> Vec<DepositedTransaction> {
-        self.epoch_deposits.remove(&l1_block_number).unwrap_or_default()
-    }
-
-    /// Get epoch info for a given L1 block number.
-    fn get_epoch_info(&self, l1_block_number: u64) -> Option<&EpochInfo> {
-        self.epoch_info.get(&l1_block_number)
+    /// Get the current L2 block number.
+    fn current_block_number(&self) -> u64 {
+        self.deriver.current_block_number()
     }
 
     async fn process_blobs(
@@ -217,7 +195,13 @@ where
 
     // Fetch blobs from beacon API (historical blobs from finalized blocks)
     let blob_provider = BeaconBlobProvider::new(&config.beacon_url);
-    let mut pipeline = DerivationPipeline::new(blob_provider, starting_l2_block);
+    let deriver_config = DeriverConfig {
+        hardfork: Hardfork::Ecotone,
+        batcher_addr,
+        base_fee_scalar: BASE_FEE_SCALAR,
+        blob_base_fee_scalar: BLOB_BASE_FEE_SCALAR,
+    };
+    let mut pipeline = DerivationPipeline::new(blob_provider, deriver_config, starting_l2_block);
 
     let mut blocks_processed: u64 = 0;
     let mut last_committed_block: Option<(u64, B256)> = None;
@@ -354,17 +338,20 @@ where
                     tracker.l1_batches_processed += 1;
                 }
 
-                // check for complete channels and process them
-                // processing means that we will take the complete channel, decompress to get raw
-                // rlp bytes and then decode the rlp bytes to get the batch data..
+                // Check for complete channels and process them into L2 blocks
                 let complete_channels = pipeline.take_complete_channels();
                 for channel in complete_channels {
-                    match process_channel(&channel, &mut pipeline, batcher_addr, &mut tracker) {
-                        Ok(blocks) => {
+                    match pipeline.deriver.process_channel(&channel) {
+                        Ok(result) => {
+                            tracker.channels_completed += 1;
+                            tracker.l2_blocks_derived += result.blocks_built;
+                            tracker.l2_txs_derived += result.txs_count;
+
                             tracing::info!(
                                 target: "derivexex::pipeline",
                                 channel_id = %hex::encode(&channel.id[..8]),
-                                l2_blocks = blocks.len(),
+                                l2_blocks = result.blocks_built,
+                                l2_txs = result.txs_count,
                                 "channel processed"
                             );
                         }
@@ -392,7 +379,7 @@ where
                         let checkpoint = DerivationCheckpoint {
                             l1_block_number: block_num,
                             l1_block_hash: block_hash.0,
-                            next_l2_block_number: pipeline.block_builder.current_block_number(),
+                            next_l2_block_number: pipeline.current_block_number(),
                             l2_blocks_derived: tracker.l2_blocks_derived,
                             l2_txs_derived: tracker.l2_txs_derived,
                             timestamp: std::time::SystemTime::now()
@@ -453,7 +440,7 @@ where
         let checkpoint = DerivationCheckpoint {
             l1_block_number: block_num,
             l1_block_hash: block_hash.0,
-            next_l2_block_number: pipeline.block_builder.current_block_number(),
+            next_l2_block_number: pipeline.current_block_number(),
             l2_blocks_derived: tracker.l2_blocks_derived,
             l2_txs_derived: tracker.l2_txs_derived,
             timestamp: std::time::SystemTime::now()
@@ -469,233 +456,6 @@ where
     }
 
     Ok(())
-}
-
-/// Process a complete channel: decompress, decode batches, build L2 blocks.
-fn process_channel<B: BlobProvider>(
-    channel: &Channel,
-    pipeline: &mut DerivationPipeline<B>,
-    batcher_addr: Address,
-    tracker: &mut DerivationTracker,
-) -> eyre::Result<Vec<L2Block>> {
-    tracker.channels_completed += 1;
-
-    let decompressed = channel.decompress()?;
-    let mut cursor = decompressed.as_slice();
-    let mut built_blocks = Vec::new();
-
-    while !cursor.is_empty() {
-        let batch_bytes = match Bytes::decode(&mut cursor) {
-            Ok(b) => b,
-            Err(_) => break,
-        };
-
-        if batch_bytes.is_empty() {
-            continue;
-        }
-
-        match Batch::decode(&batch_bytes) {
-            Ok(Batch::Single(single)) => {
-                // Build L2 block from single batch
-                if let Some(block) =
-                    build_l2_block_from_single(&single, pipeline, batcher_addr, tracker)
-                {
-                    built_blocks.push(block);
-                }
-            }
-            Ok(Batch::Span(span)) => {
-                // Build L2 blocks from span batch
-                let blocks = build_l2_blocks_from_span(&span, pipeline, batcher_addr, tracker);
-                built_blocks.extend(blocks);
-            }
-            Err(e) => {
-                tracing::warn!(
-                    target: "derivexex::pipeline",
-                    error = %e,
-                    "failed to decode batch"
-                );
-            }
-        }
-    }
-
-    Ok(built_blocks)
-}
-
-/// Build an L2 block from a single batch.
-fn build_l2_block_from_single<B: BlobProvider>(
-    single: &derivexex_pipeline::SingleBatch,
-    pipeline: &mut DerivationPipeline<B>,
-    batcher_addr: Address,
-    tracker: &mut DerivationTracker,
-) -> Option<L2Block> {
-    let epoch_num = single.epoch_num;
-
-    // Get epoch info for L1 origin
-    let epoch_info = match pipeline.get_epoch_info(epoch_num) {
-        Some(info) => info.clone(),
-        None => {
-            tracing::warn!(
-                target: "derivexex::pipeline",
-                epoch = epoch_num,
-                "missing epoch info for single batch"
-            );
-            return None;
-        }
-    };
-
-    // Check if this is a new epoch (need to set L1 origin and add deposits)
-    let is_new_epoch = pipeline.block_builder.current_sequence_number() == 0 ||
-        pipeline.get_epoch_info(epoch_num).map(|e| e.l1_ref.number) !=
-            pipeline.get_epoch_info(epoch_num.saturating_sub(1)).map(|e| e.l1_ref.number);
-
-    if is_new_epoch {
-        pipeline.block_builder.set_l1_origin(epoch_info.l1_ref.clone());
-        let deposits = pipeline.take_epoch_deposits(epoch_num);
-        if !deposits.is_empty() {
-            tracing::debug!(
-                target: "derivexex::pipeline",
-                epoch = epoch_num,
-                deposit_count = deposits.len(),
-                "adding deposits to epoch"
-            );
-            pipeline.block_builder.add_deposits(deposits);
-        }
-    }
-
-    // Create L1BlockInfo for this block
-    let sequence_number = pipeline.block_builder.current_sequence_number();
-    let l1_info = L1BlockInfo::new(
-        epoch_info.l1_ref.number,
-        epoch_info.l1_ref.timestamp,
-        epoch_info.basefee,
-        epoch_info.l1_ref.hash,
-        sequence_number,
-        batcher_addr,
-        epoch_info.blob_basefee,
-        BASE_FEE_SCALAR,
-        BLOB_BASE_FEE_SCALAR,
-    );
-
-    // Build the L2 block
-    match pipeline.block_builder.build_block(
-        single.timestamp,
-        &l1_info,
-        single.transactions.clone(),
-    ) {
-        Ok(block) => {
-            tracker.l2_blocks_derived += 1;
-            tracker.l2_txs_derived += block.tx_count() as u64;
-
-            tracing::debug!(
-                target: "derivexex::pipeline",
-                batch_type = "single",
-                l2_block = block.number,
-                epoch = epoch_num,
-                sequence = block.sequence_number,
-                txs = block.tx_count(),
-                deposits = block.deposit_count(),
-                "built L2 block"
-            );
-
-            Some(block)
-        }
-        Err(e) => {
-            tracing::warn!(
-                target: "derivexex::pipeline",
-                error = %e,
-                epoch = epoch_num,
-                "failed to build L2 block from single batch"
-            );
-            None
-        }
-    }
-}
-
-/// Build L2 blocks from a span batch.
-fn build_l2_blocks_from_span<B: BlobProvider>(
-    span: &derivexex_pipeline::SpanBatch,
-    pipeline: &mut DerivationPipeline<B>,
-    batcher_addr: Address,
-    tracker: &mut DerivationTracker,
-) -> Vec<L2Block> {
-    let mut blocks = Vec::with_capacity(span.blocks.len());
-    let base_epoch = span.l1_origin_num;
-
-    for (i, span_element) in span.blocks.iter().enumerate() {
-        // For span batches, we need to determine which epoch each block belongs to
-        // based on the relative timestamp. For now, use the base epoch.
-        // TODO: Properly calculate epoch based on timestamp
-        let epoch_num = base_epoch;
-
-        let epoch_info = match pipeline.get_epoch_info(epoch_num) {
-            Some(info) => info.clone(),
-            None => {
-                tracing::warn!(
-                    target: "derivexex::pipeline",
-                    epoch = epoch_num,
-                    block_index = i,
-                    "missing epoch info for span batch element"
-                );
-                continue;
-            }
-        };
-
-        // Set L1 origin for first block in epoch
-        if i == 0 || pipeline.block_builder.current_sequence_number() == 0 {
-            pipeline.block_builder.set_l1_origin(epoch_info.l1_ref.clone());
-            let deposits = pipeline.take_epoch_deposits(epoch_num);
-            if !deposits.is_empty() {
-                pipeline.block_builder.add_deposits(deposits);
-            }
-        }
-
-        let sequence_number = pipeline.block_builder.current_sequence_number();
-        let l1_info = L1BlockInfo::new(
-            epoch_info.l1_ref.number,
-            epoch_info.l1_ref.timestamp,
-            epoch_info.basefee,
-            epoch_info.l1_ref.hash,
-            sequence_number,
-            batcher_addr,
-            epoch_info.blob_basefee,
-            BASE_FEE_SCALAR,
-            BLOB_BASE_FEE_SCALAR,
-        );
-
-        match pipeline.block_builder.build_block(
-            span_element.timestamp,
-            &l1_info,
-            span_element.transactions.clone(),
-        ) {
-            Ok(block) => {
-                tracker.l2_blocks_derived += 1;
-                tracker.l2_txs_derived += block.tx_count() as u64;
-
-                tracing::debug!(
-                    target: "derivexex::pipeline",
-                    batch_type = "span",
-                    l2_block = block.number,
-                    epoch = epoch_num,
-                    sequence = block.sequence_number,
-                    txs = block.tx_count(),
-                    "built L2 block from span"
-                );
-
-                blocks.push(block);
-            }
-            Err(e) => {
-                tracing::warn!(
-                    target: "derivexex::pipeline",
-                    error = %e,
-                    epoch = epoch_num,
-                    block_index = i,
-                    "failed to build L2 block from span batch"
-                );
-            }
-        }
-    }
-
-    blocks
 }
 
 fn main() -> eyre::Result<()> {

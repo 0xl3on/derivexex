@@ -10,6 +10,7 @@ mod batch;
 mod block;
 mod channel;
 mod deposits;
+mod derive;
 mod frame;
 mod l1_info;
 
@@ -19,6 +20,7 @@ pub use channel::{Channel, ChannelAssembler, ChannelError};
 pub use deposits::{
     DepositError, DepositedTransaction, DEPOSIT_TX_TYPE, TRANSACTION_DEPOSITED_TOPIC,
 };
+pub use derive::{ChannelResult, DeriveError, Deriver, DeriverConfig, EpochInfo};
 pub use frame::{ChannelFrame, FrameDecoder, FrameError};
 pub use l1_info::{
     compute_l1_info_source_hash, Hardfork, L1BlockInfo, ECOTONE_L1_INFO_TX_CALLDATA_LEN,
