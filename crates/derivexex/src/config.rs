@@ -9,6 +9,7 @@ pub const OPTIMISM_PORTAL: Address = address!("0bd48f6B86a26D3a217d0Fa6FfE2B491B
 
 /// Unichain SystemConfig contract on L1 (Ethereum mainnet).
 /// https://etherscan.io/address/0xc407398d063f942febbcc6f80a156b47f3f1bda6
+#[allow(dead_code)]
 pub const SYSTEM_CONFIG: Address = address!("c407398d063f942febbcc6f80a156b47f3f1bda6");
 
 /// Fee scalars from SystemConfig.scalar() on 2026-01-24.
