@@ -404,14 +404,10 @@ impl SpanBatchTransactions {
             let valid = if let Some(_tx_type) = TxType::from_first_byte(first_byte) {
                 // Typed tx: type byte + ONE RLP list
                 cursor = &cursor[1..]; // consume type byte
-                skip_rlp_element(cursor)
-                    .map(|rest| cursor = rest)
-                    .is_some()
+                skip_rlp_element(cursor).map(|rest| cursor = rest).is_some()
             } else if first_byte >= 0xc0 {
                 // Legacy tx: starts with RLP list prefix (0xc0-0xff)
-                skip_rlp_element(cursor)
-                    .map(|rest| cursor = rest)
-                    .is_some()
+                skip_rlp_element(cursor).map(|rest| cursor = rest).is_some()
             } else {
                 // Unexpected byte - not a valid tx_data start
                 false
@@ -502,7 +498,7 @@ impl SpanBatchTransactions {
 
             // Determine tx type and fields
             let (tx_type, tx_fields) = match TxType::from_first_byte(first_byte) {
-                Some(t) => (t, &tx_bytes[1..]),       // Typed tx: skip type byte
+                Some(t) => (t, &tx_bytes[1..]), // Typed tx: skip type byte
                 None => (TxType::Legacy, tx_bytes.as_ref()), // Legacy: no type prefix
             };
 
@@ -708,7 +704,8 @@ fn reconstruct_tx(
         }
         TxType::Eip7702 => {
             // EIP-7702 (Set Code Transaction)
-            // tx_fields = rlp([value, max_priority_fee, max_fee, data, access_list, authorization_list])
+            // tx_fields = rlp([value, max_priority_fee, max_fee, data, access_list,
+            // authorization_list])
             let inner = unwrap_rlp_list(cursor)?;
             let (value, rest) = decode_rlp_bytes(inner)?;
             let (max_priority_fee, rest) = decode_rlp_bytes(rest)?;
@@ -1040,19 +1037,19 @@ fn encode_eip7702_tx(
 
     // EIP-7702: [chain_id, nonce, max_priority_fee, max_fee, gas_limit, to, value,
     //            data, access_list, authorization_list, y_parity, r, s]
-    let payload_len = chain_id.length()
-        + nonce.length()
-        + max_priority_fee.len()
-        + max_fee.len()
-        + gas_limit.length()
-        + to_rlp_len(to)
-        + value.len()
-        + data.len()
-        + access_list.len()
-        + authorization_list.len()
-        + y_parity_val.length()
-        + 33
-        + 33;
+    let payload_len = chain_id.length() +
+        nonce.length() +
+        max_priority_fee.len() +
+        max_fee.len() +
+        gas_limit.length() +
+        to_rlp_len(to) +
+        value.len() +
+        data.len() +
+        access_list.len() +
+        authorization_list.len() +
+        y_parity_val.length() +
+        33 +
+        33;
 
     alloy_rlp::Header { list: true, payload_length: payload_len }.encode(out);
 

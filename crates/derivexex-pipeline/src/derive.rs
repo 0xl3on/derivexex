@@ -92,6 +92,17 @@ impl Deriver {
         self.block_builder.current_block_number()
     }
 
+    /// Clear all epoch data (info and deposits) for L1 blocks >= first_invalid_block.
+    /// Call this on L1 reorg to remove stale state.
+    ///
+    /// Note: This doesn't roll back the L2 block number. For a production system,
+    /// you'd need to track which L2 blocks came from which L1 blocks and revert accordingly.
+    /// For this learning project, we accept that derived L2 block numbers may drift on reorg.
+    pub fn clear_epochs_from(&mut self, first_invalid_block: u64) {
+        self.epoch_info.retain(|&block_num, _| block_num < first_invalid_block);
+        self.epoch_deposits.retain(|&block_num, _| block_num < first_invalid_block);
+    }
+
     /// Process a complete channel into L2 blocks.
     pub fn process_channel(&mut self, channel: &Channel) -> Result<ChannelResult, DeriveError> {
         let decompressed = channel.decompress().map_err(DeriveError::Channel)?;

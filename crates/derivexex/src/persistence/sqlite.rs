@@ -177,6 +177,24 @@ impl DerivationDb for SqliteDb {
 
         Ok(())
     }
+
+    fn invalidate_checkpoint_if_reorged(&self, first_invalid_block: u64) -> Result<bool> {
+        let conn = self.conn.lock().map_err(|e| eyre!("lock poisoned: {e}"))?;
+
+        // Check if checkpoint exists and is at or after the invalid block
+        let checkpoint_block: Option<i64> = conn
+            .query_row("SELECT l1_block_number FROM checkpoint WHERE id = 1", [], |row| row.get(0))
+            .optional()?;
+
+        if let Some(block_num) = checkpoint_block {
+            if block_num as u64 >= first_invalid_block {
+                conn.execute("DELETE FROM checkpoint WHERE id = 1", [])?;
+                return Ok(true);
+            }
+        }
+
+        Ok(false)
+    }
 }
 
 #[cfg(test)]
@@ -232,5 +250,37 @@ mod tests {
 
         let channels = db.load_pending_channels().unwrap();
         assert!(channels.is_empty());
+    }
+
+    #[test]
+    fn test_invalidate_checkpoint_on_reorg() {
+        let db = SqliteDb::in_memory().unwrap();
+
+        // Save checkpoint at block 100
+        let checkpoint = DerivationCheckpoint {
+            l1_block_number: 100,
+            l1_block_hash: [0xab; 32],
+            next_l2_block_number: 500,
+            l2_blocks_derived: 50,
+            l2_txs_derived: 200,
+            timestamp: 1234567890,
+        };
+        db.save_checkpoint(&checkpoint).unwrap();
+
+        // Reorg starting at block 150 - checkpoint should survive
+        assert!(!db.invalidate_checkpoint_if_reorged(150).unwrap());
+        assert!(db.load_checkpoint().unwrap().is_some());
+
+        // Reorg starting at block 100 - checkpoint should be deleted
+        assert!(db.invalidate_checkpoint_if_reorged(100).unwrap());
+        assert!(db.load_checkpoint().unwrap().is_none());
+
+        // Save new checkpoint at block 200
+        let checkpoint2 = DerivationCheckpoint { l1_block_number: 200, ..checkpoint };
+        db.save_checkpoint(&checkpoint2).unwrap();
+
+        // Reorg starting at block 50 - checkpoint should be deleted
+        assert!(db.invalidate_checkpoint_if_reorged(50).unwrap());
+        assert!(db.load_checkpoint().unwrap().is_none());
     }
 }

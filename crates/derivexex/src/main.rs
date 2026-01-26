@@ -133,6 +133,12 @@ impl<B: BlobProvider> DerivationPipeline<B> {
     fn take_complete_channels(&mut self) -> Vec<Channel> {
         self.assembler.take_complete()
     }
+
+    /// Handle L1 reorg by clearing stale in-memory state.
+    fn handle_reorg(&mut self, first_invalid_block: u64) {
+        self.assembler.clear();
+        self.deriver.clear_epochs_from(first_invalid_block);
+    }
 }
 
 pub async fn init<Node>(
@@ -409,24 +415,64 @@ where
                 }
             }
             ExExNotification::ChainReorged { old, new } => {
+                let first_reverted = *old.range().start();
                 tracing::warn!(
                     target: "derivexex::exex",
                     from = ?old.range(),
                     to = ?new.range(),
-                    "chain reorged - clearing pending channels"
+                    "chain reorged"
                 );
 
-                // Clear pending channels on reorg as they may be invalid
+                // Clear in-memory pipeline state (pending channels + epoch data)
+                pipeline.handle_reorg(first_reverted);
+
+                // Clear persisted pending channels
                 if let Err(e) = db.clear_pending_channels() {
                     tracing::error!(target: "derivexex::persistence", error = %e, "failed to clear channels");
                 }
+
+                // Invalidate checkpoint if it references a reverted block
+                match db.invalidate_checkpoint_if_reorged(first_reverted) {
+                    Ok(true) => {
+                        tracing::warn!(
+                            target: "derivexex::persistence",
+                            first_reverted,
+                            "checkpoint invalidated due to reorg"
+                        );
+                        last_committed_block = None;
+                    }
+                    Ok(false) => {}
+                    Err(e) => {
+                        tracing::error!(target: "derivexex::persistence", error = %e, "failed to check checkpoint");
+                    }
+                }
             }
             ExExNotification::ChainReverted { old } => {
+                let first_reverted = *old.range().start();
                 tracing::warn!(target: "derivexex::exex", chain = ?old.range(), "chain reverted");
 
-                // Clear pending channels on revert
+                // Clear in-memory pipeline state (pending channels + epoch data)
+                pipeline.handle_reorg(first_reverted);
+
+                // Clear persisted pending channels
                 if let Err(e) = db.clear_pending_channels() {
                     tracing::error!(target: "derivexex::persistence", error = %e, "failed to clear channels");
+                }
+
+                // Invalidate checkpoint if it references a reverted block
+                match db.invalidate_checkpoint_if_reorged(first_reverted) {
+                    Ok(true) => {
+                        tracing::warn!(
+                            target: "derivexex::persistence",
+                            first_reverted,
+                            "checkpoint invalidated due to revert"
+                        );
+                        last_committed_block = None;
+                    }
+                    Ok(false) => {}
+                    Err(e) => {
+                        tracing::error!(target: "derivexex::persistence", error = %e, "failed to check checkpoint");
+                    }
                 }
             }
         }

@@ -28,4 +28,8 @@ pub trait DerivationDb: Send + Sync {
     fn remove_channel(&self, channel_id: &[u8; 16]) -> eyre::Result<()>;
 
     fn clear_pending_channels(&self) -> eyre::Result<()>;
+
+    /// Invalidate checkpoint if it references an L1 block at or after `first_invalid_block`.
+    /// Returns true if checkpoint was deleted.
+    fn invalidate_checkpoint_if_reorged(&self, first_invalid_block: u64) -> eyre::Result<bool>;
 }

@@ -146,6 +146,12 @@ impl ChannelAssembler {
             .filter_map(|id| self.pending.remove(&id).map(|ch| ch.assemble()))
             .collect()
     }
+
+    /// Clear all pending channels. Call on L1 reorg.
+    #[inline]
+    pub fn clear(&mut self) {
+        self.pending.clear();
+    }
 }
 
 impl Default for ChannelAssembler {

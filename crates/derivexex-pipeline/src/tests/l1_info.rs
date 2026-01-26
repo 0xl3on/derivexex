@@ -112,9 +112,8 @@ fn test_to_deposit_tx_isthmus() {
 
 #[test]
 fn test_builder_pattern() {
-    let info =
-        L1BlockInfo::new(1, 2, U256::ZERO, B256::ZERO, 0, Address::ZERO, U256::ZERO, 0, 0)
-            .with_operator_fees(123, 456);
+    let info = L1BlockInfo::new(1, 2, U256::ZERO, B256::ZERO, 0, Address::ZERO, U256::ZERO, 0, 0)
+        .with_operator_fees(123, 456);
 
     assert_eq!(info.operator_fee_scalar, 123);
     assert_eq!(info.operator_fee_constant, 456);
