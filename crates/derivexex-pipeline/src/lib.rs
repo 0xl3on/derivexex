@@ -19,18 +19,19 @@ pub mod l1_info;
 #[cfg(test)]
 mod tests;
 
-pub use batch::{Batch, BatchError, SingleBatch, SpanBatch, SpanBatchElement};
-pub use block::{BlockBuildError, L1BlockRef, L2Block, L2BlockBuilder, L2Transaction};
-pub use channel::{Channel, ChannelAssembler, ChannelError};
-pub use deposits::{
-    DepositError, DepositedTransaction, DEPOSIT_TX_TYPE, TRANSACTION_DEPOSITED_TOPIC,
-};
+// High-level
 pub use derive::{ChannelResult, DeriveError, Deriver, DeriverConfig, EpochInfo};
+pub use block::{L1BlockRef, L2Block, L2BlockBuilder, L2Transaction, BlockBuildError};
+
+// Pipeline stages
 pub use frame::{ChannelFrame, FrameDecoder, FrameError};
-pub use l1_info::{
-    compute_l1_info_source_hash, Hardfork, L1BlockInfo, ECOTONE_L1_INFO_TX_CALLDATA_LEN,
-    ISTHMUS_L1_INFO_TX_CALLDATA_LEN, L1_ATTRIBUTES_DEPOSITOR, L1_BLOCK_ADDRESS, L1_INFO_TX_GAS,
-};
+pub use channel::{Channel, ChannelAssembler, ChannelError};
+pub use batch::{Batch, BatchError, SingleBatch, SpanBatch, SpanBatchElement};
+
+// Deposits & L1 info
+pub use deposits::{DepositedTransaction, DepositError, DEPOSIT_TX_TYPE, TRANSACTION_DEPOSITED_TOPIC};
+pub use l1_info::{L1BlockInfo, Hardfork, L1_BLOCK_ADDRESS, L1_ATTRIBUTES_DEPOSITOR, L1_INFO_TX_GAS};
+pub use l1_info::{compute_l1_info_source_hash, ECOTONE_L1_INFO_TX_CALLDATA_LEN, ISTHMUS_L1_INFO_TX_CALLDATA_LEN};
 
 use alloy_eips::eip4844::Blob;
 
