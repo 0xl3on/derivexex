@@ -1,0 +1,583 @@
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&display=swap");
+
+:root {
+  /* Color Palette */
+  --bg-primary: #050505;
+  --bg-secondary: #0a0a0a;
+  --bg-tertiary: #111111;
+  --text-primary: #e8e8e8;
+  --text-body: #a0a0a0;
+  --text-muted: #606060;
+  --text-dim: #505050;
+  --text-subtle: #404040;
+  --link-default: #808080;
+  --link-hover: #e0e0e0;
+  --border: rgba(255, 255, 255, 0.04);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+
+  /* Syntax highlighting - muted grayscale */
+  --syn-keyword: #808080;
+  --syn-string: #707070;
+  --syn-comment: #404040;
+  --syn-function: #a0a0a0;
+  --syn-type: #909090;
+  --syn-number: #707070;
+  --syn-macro: #909090;
+}
+
+/* Base styles */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+}
+
+body {
+  font-family: "JetBrains Mono", "Fira Code", "SF Mono", Consolas, monospace !important;
+  font-weight: 400;
+  font-size: 0.85rem;
+  line-height: 1.7;
+  color: var(--text-body);
+  background-color: var(--bg-primary) !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Main content area */
+.main-heading,
+main,
+.content,
+.docblock,
+body.rustdoc {
+  background-color: var(--bg-primary) !important;
+}
+
+.rustdoc {
+  padding: 4rem 2rem;
+}
+
+.width-limiter {
+  max-width: 800px;
+}
+
+/* Typography */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: "JetBrains Mono", "Fira Code", "SF Mono", Consolas, monospace !important;
+  font-weight: 500;
+  color: var(--text-primary);
+  letter-spacing: 0;
+}
+
+h1,
+.main-heading h1,
+.fqn {
+  font-size: 1.5rem !important;
+  color: var(--text-primary) !important;
+  border: none !important;
+}
+
+h2 {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--text-dim) !important;
+  border: none !important;
+  margin-top: 3rem;
+  margin-bottom: 1.5rem;
+}
+
+h3,
+h4 {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+p,
+.docblock p {
+  font-size: 0.85rem;
+  color: var(--text-body);
+  line-height: 1.7;
+  margin-bottom: 1.25rem;
+}
+
+/* Links - no underlines, color shift only */
+a {
+  color: var(--link-default) !important;
+  text-decoration: none !important;
+  letter-spacing: 0.05em;
+  transition: color 0.2s ease;
+}
+
+a:hover {
+  color: var(--link-hover) !important;
+  text-decoration: none !important;
+}
+
+/* Sidebar */
+.sidebar,
+.rustdoc .sidebar,
+nav.sidebar {
+  background-color: var(--bg-primary) !important;
+  border-right: 1px solid var(--border) !important;
+}
+
+.sidebar .current,
+.sidebar a.current {
+  background-color: transparent !important;
+  color: var(--text-body) !important;
+}
+
+.sidebar a {
+  color: var(--text-muted) !important;
+  font-size: 0.85rem;
+}
+
+.sidebar a:hover {
+  color: var(--text-body) !important;
+  background-color: transparent !important;
+}
+
+.sidebar h2,
+.sidebar h3,
+.sidebar-title,
+.sidebar .block > h3 {
+  font-size: 0.65rem !important;
+  font-weight: 500;
+  color: var(--text-dim) !important;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  border: none !important;
+  background: none !important;
+}
+
+.sidebar-elems,
+.sidebar .block {
+  border: none !important;
+}
+
+.sidebar .logo-container {
+  border: none !important;
+}
+
+/* Search */
+.search-input,
+#search-input,
+.search-container input {
+  font-family: "JetBrains Mono", "Fira Code", "SF Mono", Consolas, monospace !important;
+  font-size: 0.85rem;
+  background-color: var(--bg-secondary) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 0 !important;
+  color: var(--text-body) !important;
+}
+
+.search-input::placeholder,
+#search-input::placeholder {
+  color: var(--text-subtle) !important;
+}
+
+.search-input:focus,
+#search-input:focus {
+  border-color: var(--border-subtle) !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.search-results,
+#search {
+  background-color: var(--bg-secondary) !important;
+  border: 1px solid var(--border) !important;
+}
+
+.search-results a {
+  color: var(--link-default) !important;
+}
+
+.search-results a:hover {
+  color: var(--link-hover) !important;
+  background-color: var(--bg-tertiary) !important;
+}
+
+/* Code blocks */
+pre,
+code,
+.rustdoc code {
+  font-family: "JetBrains Mono", "Fira Code", "SF Mono", Consolas, monospace !important;
+  font-size: 0.85rem !important;
+  background-color: var(--bg-secondary) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 0 !important;
+}
+
+code {
+  padding: 0.1em 0.3em;
+}
+
+pre {
+  padding: 1rem;
+  overflow-x: auto;
+}
+
+pre code {
+  border: none !important;
+  padding: 0;
+  background: transparent !important;
+}
+
+.docblock pre {
+  background-color: var(--bg-secondary) !important;
+  border: 1px solid var(--border) !important;
+}
+
+/* Syntax highlighting - muted grayscale */
+.kw,
+.kw-2,
+pre.rust .kw {
+  color: var(--syn-keyword) !important;
+}
+.string,
+pre.rust .string {
+  color: var(--syn-string) !important;
+}
+.comment,
+pre.rust .comment {
+  color: var(--syn-comment) !important;
+  font-style: normal !important;
+}
+.fn,
+.fnname,
+pre.rust .fn {
+  color: var(--syn-function) !important;
+}
+.type,
+pre.rust .type {
+  color: var(--syn-type) !important;
+}
+.number,
+pre.rust .number {
+  color: var(--syn-number) !important;
+}
+.macro,
+pre.rust .macro {
+  color: var(--syn-macro) !important;
+}
+.self,
+pre.rust .self {
+  color: var(--syn-keyword) !important;
+}
+.attribute,
+pre.rust .attribute {
+  color: var(--text-muted) !important;
+}
+.lifetime,
+pre.rust .lifetime {
+  color: var(--text-muted) !important;
+}
+.prelude-ty,
+pre.rust .prelude-ty {
+  color: var(--syn-type) !important;
+}
+.prelude-val,
+pre.rust .prelude-val {
+  color: var(--syn-function) !important;
+}
+.bool-val,
+pre.rust .bool-val {
+  color: var(--syn-number) !important;
+}
+
+/* Item entries */
+.item-table {
+  border: none !important;
+}
+
+.item-name,
+.item-table .item-name {
+  font-size: 0.85rem;
+  color: var(--syn-type) !important;
+}
+
+.item-name a {
+  color: var(--syn-type) !important;
+}
+
+.item-name a:hover {
+  color: var(--link-hover) !important;
+}
+
+.desc,
+.item-table .desc {
+  font-size: 0.75rem !important;
+  color: var(--text-dim) !important;
+  margin-top: 0.25rem;
+}
+
+/* Section headers */
+.section-header,
+.small-section-header {
+  font-size: 0.65rem !important;
+  font-weight: 500;
+  color: var(--text-dim) !important;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  margin-bottom: 1.5rem;
+  border: none !important;
+}
+
+.small-section-header a {
+  color: var(--text-dim) !important;
+}
+
+/* Module list */
+.mod-path,
+.path {
+  color: var(--text-muted) !important;
+}
+
+/* Function/struct signatures */
+.fn-sig,
+.method-sig,
+.type-sig,
+.decl {
+  color: var(--text-body) !important;
+}
+
+.fnname {
+  color: var(--syn-function) !important;
+}
+
+/* Docblock content */
+.docblock {
+  color: var(--text-body);
+  font-size: 0.85rem;
+}
+
+.docblock h1 {
+  font-size: 1rem !important;
+  color: var(--text-primary) !important;
+}
+
+.docblock h2 {
+  font-size: 0.85rem !important;
+}
+
+.docblock code {
+  color: var(--text-body) !important;
+}
+
+/* Lists */
+ul,
+ol {
+  color: var(--text-body);
+}
+
+li {
+  margin-bottom: 0.5rem;
+}
+
+/* Tables */
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th,
+td {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+
+th {
+  background-color: var(--bg-secondary);
+  color: var(--text-muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  font-size: 0.65rem;
+  letter-spacing: 0.15em;
+}
+
+td {
+  color: var(--text-body);
+}
+
+/* Stability markers, badges */
+.stab,
+.stability {
+  background-color: var(--bg-secondary) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 0 !important;
+  color: var(--text-muted) !important;
+  font-size: 0.75rem;
+}
+
+/* Toggle/expand buttons */
+.toggle-wrapper,
+.collapse-toggle {
+  color: var(--text-muted) !important;
+}
+
+details summary {
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+details summary:hover {
+  color: var(--text-body);
+}
+
+/* Borders and dividers */
+hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 2rem 0;
+}
+
+.item-table > .item-row {
+  border-bottom: 1px solid var(--border) !important;
+}
+
+/* Remove default rustdoc decorations */
+.rustdoc .example-wrap {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.rustdoc .example-wrap > pre {
+  margin: 0;
+}
+
+/* Nav bar / top bar */
+.rustdoc-navigation,
+nav.sub {
+  background-color: var(--bg-primary) !important;
+  border-bottom: 1px solid var(--border) !important;
+}
+
+/* Out-of-band info (source links, etc) */
+.out-of-band {
+  color: var(--text-subtle) !important;
+  font-size: 0.75rem;
+}
+
+.out-of-band a {
+  color: var(--text-subtle) !important;
+}
+
+.out-of-band a:hover {
+  color: var(--text-muted) !important;
+}
+
+/* Anchors */
+.anchor {
+  color: var(--text-subtle) !important;
+}
+
+/* Module/crate info */
+.crate-name,
+.module-item .item-name {
+  font-size: 0.85rem;
+}
+
+/* Remove backgrounds from various elements */
+.content .item-info,
+.content .method .where,
+.content .fn .where {
+  background: transparent !important;
+}
+
+/* Type parameters */
+.type-params {
+  color: var(--text-muted) !important;
+}
+
+/* Where clauses */
+.where {
+  color: var(--text-dim) !important;
+  font-size: 0.8rem;
+}
+
+/* Source code view */
+.src-content,
+.source .content {
+  background-color: var(--bg-primary) !important;
+}
+
+.src-line-numbers,
+.line-numbers {
+  color: var(--text-subtle) !important;
+  border-right: 1px solid var(--border) !important;
+}
+
+/* Settings page */
+#settings {
+  background-color: var(--bg-primary) !important;
+}
+
+/* Hide theme picker (we're overriding everything anyway) */
+#theme-picker,
+#theme-choices {
+  display: none !important;
+}
+
+/* Tooltip */
+.tooltip {
+  background-color: var(--bg-tertiary) !important;
+  border: 1px solid var(--border-subtle) !important;
+  color: var(--text-body) !important;
+  border-radius: 0 !important;
+}
+
+/* Scroll to top button */
+#scroll-to-top {
+  background-color: var(--bg-secondary) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-muted) !important;
+}
+
+/* Mobile adjustments */
+@media (max-width: 700px) {
+  .rustdoc {
+    padding: 2rem 1rem;
+  }
+
+  .sidebar {
+    background-color: var(--bg-primary) !important;
+  }
+}
+
+/* Remove any remaining colored elements */
+.content .highlighted {
+  background-color: var(--bg-tertiary) !important;
+}
+
+/* Impl blocks */
+.impl-items {
+  border-left: 1px solid var(--border) !important;
+  padding-left: 1rem;
+  margin-left: 0.5rem;
+}
+
+/* Method documentation */
+.method-toggle {
+  border: none !important;
+}
+
+/* Deprecated items */
+.deprecated {
+  color: var(--text-subtle) !important;
+}
+
+/* Portability info */
+.portability {
+  background-color: var(--bg-secondary) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-muted) !important;
+}

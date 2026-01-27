@@ -33,7 +33,9 @@ pub use deposits::{DepositedTransaction, DepositError, DEPOSIT_TX_TYPE, TRANSACT
 pub use l1_info::{L1BlockInfo, Hardfork, L1_BLOCK_ADDRESS, L1_ATTRIBUTES_DEPOSITOR, L1_INFO_TX_GAS};
 pub use l1_info::{compute_l1_info_source_hash, ECOTONE_L1_INFO_TX_CALLDATA_LEN, ISTHMUS_L1_INFO_TX_CALLDATA_LEN};
 
-use alloy_eips::eip4844::Blob;
+// Re-exports for convenience
+pub use alloy_eips::eip4844::Blob;
+pub use alloy_primitives::Bytes;
 
 /// Maximum blob data size: (4 * 31 + 3) * 1024 - 4 = 130044 bytes
 const BLOB_MAX_DATA_SIZE: usize = 130044;
@@ -151,4 +153,49 @@ fn reassemble_bytes(mut output_pos: usize, encoded_byte: &[u8; 4], output: &mut 
 /// Returns the maximum blob data size constant.
 pub const fn max_blob_data_size() -> usize {
     BLOB_MAX_DATA_SIZE
+}
+
+/// Extracts all sequencer transactions from blobs.
+///
+/// ```ignore
+/// let blobs = fetch_blobs_for_tx(tx_hash).await?;
+/// let txs = decode_blobs_to_transactions(&blobs)?;
+/// ```
+pub fn decode_blobs_to_transactions(blobs: &[Blob]) -> Result<Vec<Bytes>, DeriveError> {
+    use alloy_rlp::{Decodable, bytes::Bytes as RlpBytes};
+
+    let mut assembler = ChannelAssembler::new();
+
+    for blob in blobs {
+        let data = decode_blob_data(blob);
+        let frames = FrameDecoder::decode_frames(&data)?;
+        for frame in frames {
+            assembler.add_frame(frame);
+        }
+    }
+
+    let channels = assembler.take_complete();
+    if channels.is_empty() {
+        return Err(DeriveError::IncompleteChannel);
+    }
+
+    let mut txs = Vec::new();
+    for channel in channels {
+        let decompressed = channel.decompress()?;
+        let mut cursor = decompressed.as_slice();
+        while !cursor.is_empty() {
+            let batch_bytes = RlpBytes::decode(&mut cursor).map_err(|_| DeriveError::Rlp)?;
+            let batch = Batch::decode(&batch_bytes)?;
+            match batch {
+                Batch::Single(single) => txs.extend(single.transactions),
+                Batch::Span(span) => {
+                    for block in span.blocks {
+                        txs.extend(block.transactions);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(txs)
 }

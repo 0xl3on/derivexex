@@ -257,6 +257,8 @@ impl Deriver {
 /// Errors that can occur during derivation.
 #[derive(Debug, thiserror::Error)]
 pub enum DeriveError {
+    #[error("frame error: {0}")]
+    Frame(#[from] crate::FrameError),
     #[error("channel error: {0}")]
     Channel(#[from] crate::ChannelError),
     #[error("batch decode error: {0}")]
@@ -265,4 +267,8 @@ pub enum DeriveError {
     BlockBuild(#[from] crate::BlockBuildError),
     #[error("missing epoch info for L1 block {0}")]
     MissingEpoch(u64),
+    #[error("incomplete channel: blobs do not contain a complete channel")]
+    IncompleteChannel,
+    #[error("rlp decode error")]
+    Rlp,
 }
