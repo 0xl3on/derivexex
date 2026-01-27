@@ -18,3 +18,4 @@ miniz_oxide = { workspace = true }
 brotli = { workspace = true }
 unsigned-varint = { workspace = true }
 hex = { workspace = true }
+bon = { workspace = true }

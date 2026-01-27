@@ -3,8 +3,8 @@
 //! In OP Stack, "deposit transactions" are any L1-initiated transactions that execute on L2.
 //! This includes ETH bridges, token bridges, arbitrary L2 calls, and system deposits.
 
-pub(crate) mod encode;
-pub(crate) mod parse;
+pub mod encode;
+pub mod parse;
 
 use alloy_primitives::{Address, Bytes, B256, U256};
 use serde::Serialize;

@@ -10,7 +10,7 @@
 //!
 //! Spec: https://specs.optimism.io/protocol/deposits.html#l1-attributes-deposited-transaction
 
-pub(crate) mod encode;
+pub mod encode;
 
 use alloy_primitives::{address, keccak256, Address, Bytes, B256, U256};
 

@@ -5,6 +5,7 @@
 //! - Frame parsing (extracting frames from blob data)
 //! - Channel assembly (combining frames into complete channels)
 //! - Batch decoding (SingleBatch and SpanBatch formats)
+//! - L2 block building with deposits
 
 mod batch;
 mod block;
@@ -12,8 +13,8 @@ mod channel;
 mod derive;
 mod frame;
 
-pub(crate) mod deposits;
-pub(crate) mod l1_info;
+pub mod deposits;
+pub mod l1_info;
 
 #[cfg(test)]
 mod tests;

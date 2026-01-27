@@ -71,6 +71,9 @@ brotli = "7"
 # Encoding
 unsigned-varint = "0.8"
 
+# Builders
+bon = "3"
+
 # Testing
 dotenvy = "0.15"
 

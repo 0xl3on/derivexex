@@ -44,6 +44,7 @@ pub enum L2Transaction {
 /// Builds L2 blocks from derived data.
 ///
 /// Call `set_l1_origin` when starting a new epoch, then `build_block` for each L2 block.
+#[derive(Debug, Clone)]
 pub struct L2BlockBuilder {
     hardfork: Hardfork,
     /// Current L1 origin for the epoch
@@ -170,6 +171,7 @@ pub enum BlockBuildError {
 
 /// A derived L2 block ready for execution.
 #[derive(Debug, Clone, Serialize)]
+#[must_use]
 pub struct L2Block {
     /// L2 block number
     pub number: u64,

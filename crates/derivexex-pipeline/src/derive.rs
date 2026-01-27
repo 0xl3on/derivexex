@@ -5,6 +5,7 @@
 
 use alloy_primitives::{Address, Bytes, U256};
 use alloy_rlp::Decodable;
+use bon::Builder;
 use std::collections::HashMap;
 
 use crate::{
@@ -12,16 +13,18 @@ use crate::{
     L2BlockBuilder,
 };
 
-/// Configuration for the deriver.
-#[derive(Debug, Clone)]
+/// Configuration for the deriver (defaults are Unichain values).
+#[derive(Debug, Clone, Builder)]
 pub struct DeriverConfig {
+    #[builder(default)]
     pub hardfork: Hardfork,
     pub batcher_addr: Address,
+    #[builder(default = 2000)]
     pub base_fee_scalar: u32,
+    #[builder(default = 900_000)]
     pub blob_base_fee_scalar: u32,
-    /// L2 chain genesis timestamp (for computing L2 block timestamps from span batches)
     pub l2_genesis_time: u64,
-    /// L2 block time in seconds (typically 1 or 2 seconds)
+    #[builder(default = 1)]
     pub l2_block_time: u64,
 }
 
@@ -34,8 +37,7 @@ pub struct EpochInfo {
 }
 
 /// High-level deriver that processes channels into L2 blocks.
-///
-/// Manages epoch tracking, deposits, and L2 block building.
+#[derive(Clone)]
 pub struct Deriver {
     config: DeriverConfig,
     block_builder: L2BlockBuilder,
@@ -46,7 +48,8 @@ pub struct Deriver {
 }
 
 /// Stats from processing a channel.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
+#[must_use]
 pub struct ChannelResult {
     pub blocks_built: u64,
     pub txs_count: u64,
