@@ -2,7 +2,7 @@
 //!
 //! Deposit transactions use a custom RLP format:
 //! `0x7E || rlp([source_hash, from, to, mint, value, gas, is_system_tx, data])`
-//! Spec: https://specs.optimism.io/protocol/deposits.html
+//! Spec: <https://specs.optimism.io/protocol/deposits.html>
 
 use alloy_primitives::{keccak256, B256};
 

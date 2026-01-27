@@ -1,6 +1,6 @@
 //! Batch decoding for OP Stack rlp enconded batches.
 //!
-//! Ported from kona-protocol (https://github.com/op-rs/kona)
+//! Ported from kona-protocol (<https://github.com/op-rs/kona>)
 //! Supports both SingleBatch (type 0) and SpanBatch (type 1, introduced in Delta network upgrade).
 //!
 //! Why didn't I just use kona crates?

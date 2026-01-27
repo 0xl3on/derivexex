@@ -1,7 +1,7 @@
 //! Encoding for L1 block info calldata (Ecotone and Isthmus).
 //!
 //! ## Ecotone (packed, 164 bytes)
-//! https://specs.optimism.io/protocol/ecotone/l1-attributes.html
+//! <https://specs.optimism.io/protocol/ecotone/l1-attributes.html>
 //! ```text
 //! | Offset | Size | Field              |
 //! |--------|------|--------------------|
@@ -19,7 +19,7 @@
 //!
 //! ## Isthmus (packed, 180 bytes)
 //! Ecotone layout + 16 bytes for operator fees:
-//! https://specs.optimism.io/protocol/isthmus/l1-attributes.html
+//! <https://specs.optimism.io/protocol/isthmus/l1-attributes.html>
 //! ```text
 //! | 164    | 4    | operatorFeeScalar   |
 //! | 168    | 8    | operatorFeeConstant |

@@ -43,7 +43,7 @@ const BLOB_ENCODING_ROUNDS: usize = 1024;
 
 /// Decodes blob data from EIP-4844 field element encoding (OP v0 format) into provided buffer.
 /// Returns the length of decoded data. Buffer must be at least BLOB_MAX_DATA_SIZE bytes.
-/// https://github.com/op-rs/kona/blob/fe6dfcf771059109f1d75043d5ecbbfa3b6ca1a5/crates/protocol/derive/src/sources/blob_data.rs#L29
+/// <https://github.com/op-rs/kona/blob/fe6dfcf771059109f1d75043d5ecbbfa3b6ca1a5/crates/protocol/derive/src/sources/blob_data.rs#L29>
 pub fn decode_blob_data_into(blob: &Blob, output: &mut [u8]) -> usize {
     let data: &[u8] = blob.as_ref();
 

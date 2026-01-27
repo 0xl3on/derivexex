@@ -8,7 +8,7 @@
 //! - **Ecotone**: Packed `setL1BlockValuesEcotone` (164 bytes)
 //! - **Isthmus**: Packed `setL1BlockValuesIsthmus` (180 bytes), adds operator fees
 //!
-//! Spec: https://specs.optimism.io/protocol/deposits.html#l1-attributes-deposited-transaction
+//! Spec: <https://specs.optimism.io/protocol/deposits.html#l1-attributes-deposited-transaction>
 
 pub mod encode;
 
@@ -19,7 +19,7 @@ use crate::deposits::DepositedTransaction;
 pub use encode::{ECOTONE_L1_INFO_TX_CALLDATA_LEN, ISTHMUS_L1_INFO_TX_CALLDATA_LEN};
 
 /// The following variables are hardcoded according to the OP stack:
-/// https://specs.optimism.io/protocol/deposits.html#l1-attributes-deposited-transaction
+/// <https://specs.optimism.io/protocol/deposits.html#l1-attributes-deposited-transaction>
 /// The L1 attributes depositor account (EOA with no known private key).
 pub const L1_ATTRIBUTES_DEPOSITOR: Address = address!("DeaDDEaDDeAdDeAdDEAdDEaddeAddEAdDEAd0001");
 /// The L1Block predeploy contract address on L2.
@@ -196,7 +196,7 @@ impl L1BlockInfo {
     ///
     /// This creates the L1 attributes deposited transaction that must be
     /// the first transaction in every L2 block.
-    /// Example: https://unichain.blockscout.com/tx/0x0c5cbaf6631111c2747333f21a781ccdce3e6c4529f0fc68e678a558d3d859f1
+    /// Example: <https://unichain.blockscout.com/tx/0x0c5cbaf6631111c2747333f21a781ccdce3e6c4529f0fc68e678a558d3d859f1>
     pub fn to_deposit_tx(&self, hardfork: Hardfork) -> DepositedTransaction {
         DepositedTransaction {
             source_hash: self.source_hash(),
