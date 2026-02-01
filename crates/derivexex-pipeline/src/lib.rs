@@ -6,6 +6,8 @@
 //! - Channel assembly (combining frames into complete channels)
 //! - Batch decoding (SingleBatch and SpanBatch formats)
 //! - L2 block building with deposits
+//!
+//! For async streaming pipeline, see the `derivexex-stream` crate.
 
 mod batch;
 mod block;
@@ -13,6 +15,7 @@ mod channel;
 mod derive;
 mod frame;
 
+pub mod config;
 pub mod deposits;
 pub mod l1_info;
 

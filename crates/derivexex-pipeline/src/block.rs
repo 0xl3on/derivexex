@@ -36,7 +36,7 @@ pub struct L1BlockRef {
 #[derive(Debug, Clone, Serialize)]
 pub enum L2Transaction {
     /// Deposit transaction (type 0x7E) - includes L1 info and user deposits
-    Deposit(DepositedTransaction),
+    Deposit(Box<DepositedTransaction>),
     /// Sequencer transaction (from batch) - raw RLP-encoded tx bytes
     Sequencer(Bytes),
 }
@@ -44,6 +44,9 @@ pub enum L2Transaction {
 /// Builds L2 blocks from derived data.
 ///
 /// Call `set_l1_origin` when starting a new epoch, then `build_block` for each L2 block.
+///
+/// Block numbers start at 0 by default. Use `set_block_number` to set a different
+/// starting point (e.g., when resuming from a checkpoint).
 #[derive(Debug, Clone)]
 pub struct L2BlockBuilder {
     hardfork: Hardfork,
@@ -62,17 +65,22 @@ pub struct L2BlockBuilder {
 impl L2BlockBuilder {
     /// Create a new block builder.
     ///
-    /// # Arguments
-    /// * `hardfork` - The hardfork to use for L1 info encoding
-    /// * `starting_l2_block` - The L2 block number to start from
-    pub fn new(hardfork: Hardfork, starting_l2_block: u64) -> Self {
+    /// Block numbers start at 0. Use `set_block_number` to set a different starting point.
+    pub fn new(hardfork: Hardfork) -> Self {
         Self {
             hardfork,
             l1_origin: None,
-            l2_block_number: starting_l2_block,
+            l2_block_number: 0,
             sequence_number: 0,
             pending_deposits: Vec::new(),
         }
+    }
+
+    /// Set the current block number.
+    ///
+    /// Use this when resuming from a checkpoint where you know the exact block number.
+    pub fn set_block_number(&mut self, block_number: u64) {
+        self.l2_block_number = block_number;
     }
 
     /// Set the L1 origin for a new epoch.
@@ -114,12 +122,12 @@ impl L2BlockBuilder {
 
         // 1. L1 Attributes deposit (always first)
         let l1_info_deposit = l1_info.to_deposit_tx(self.hardfork);
-        transactions.push(L2Transaction::Deposit(l1_info_deposit));
+        transactions.push(L2Transaction::Deposit(Box::new(l1_info_deposit)));
 
         // 2. User deposits (only in first block of epoch, sequence_number = 0)
         if self.sequence_number == 0 {
             for deposit in self.pending_deposits.drain(..) {
-                transactions.push(L2Transaction::Deposit(deposit));
+                transactions.push(L2Transaction::Deposit(Box::new(deposit)));
             }
         }
 

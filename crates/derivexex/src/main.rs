@@ -73,12 +73,12 @@ struct DerivationPipeline<B: BlobProvider> {
 }
 
 impl<B: BlobProvider> DerivationPipeline<B> {
-    fn new(blob_provider: B, config: DeriverConfig, starting_l2_block: u64) -> Self {
+    fn new(blob_provider: B, config: DeriverConfig) -> Self {
         Self {
             blob_provider,
             assembler: ChannelAssembler::new(),
             blob_decode_buf: vec![0u8; max_blob_data_size()],
-            deriver: Deriver::new(config, starting_l2_block),
+            deriver: Deriver::new(config),
         }
     }
 
@@ -95,6 +95,11 @@ impl<B: BlobProvider> DerivationPipeline<B> {
     /// Get the current L2 block number.
     fn current_block_number(&self) -> u64 {
         self.deriver.current_block_number()
+    }
+
+    /// Set the starting L2 block number (for resuming from checkpoint).
+    fn set_starting_block(&mut self, block_number: u64) {
+        self.deriver.set_starting_block(block_number);
     }
 
     async fn process_blobs(
@@ -211,7 +216,12 @@ where
         l2_genesis_time: L2_GENESIS_TIME,
         l2_block_time: L2_BLOCK_TIME,
     };
-    let mut pipeline = DerivationPipeline::new(blob_provider, deriver_config, starting_l2_block);
+    let mut pipeline = DerivationPipeline::new(blob_provider, deriver_config);
+
+    // Resume from checkpoint if we have a known starting block
+    if starting_l2_block > 0 {
+        pipeline.set_starting_block(starting_l2_block);
+    }
 
     let mut blocks_processed: u64 = 0;
     let mut last_committed_block: Option<(u64, B256)> = None;

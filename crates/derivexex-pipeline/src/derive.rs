@@ -58,13 +58,20 @@ pub struct ChannelResult {
 
 impl Deriver {
     /// Create a new deriver.
-    pub fn new(config: DeriverConfig, starting_l2_block: u64) -> Self {
+    pub fn new(config: DeriverConfig) -> Self {
         Self {
-            block_builder: L2BlockBuilder::new(config.hardfork, starting_l2_block),
+            block_builder: L2BlockBuilder::new(config.hardfork),
             config,
             epoch_deposits: HashMap::new(),
             epoch_info: HashMap::new(),
         }
+    }
+
+    /// Set the starting L2 block number.
+    ///
+    /// Use this when resuming from a checkpoint.
+    pub fn set_starting_block(&mut self, block_number: u64) {
+        self.block_builder.set_block_number(block_number);
     }
 
     /// Register L1 block info for an epoch.

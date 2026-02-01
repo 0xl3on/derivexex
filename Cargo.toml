@@ -3,7 +3,9 @@ resolver = "3"
 members = [
     "crates/derivexex-types",
     "crates/derivexex-pipeline",
+    "crates/derivexex-stream",
     "crates/derivexex",
+    "bin",
 ]
 
 [workspace.package]
@@ -16,6 +18,7 @@ license = "MIT OR Apache-2.0"
 # Internal crates
 derivexex-types = { path = "crates/derivexex-types" }
 derivexex-pipeline = { path = "crates/derivexex-pipeline" }
+derivexex-stream = { path = "crates/derivexex-stream" }
 
 # Reth
 reth = { git = "https://github.com/paradigmxyz/reth.git" }
@@ -76,6 +79,10 @@ bon = "3"
 
 # Testing
 dotenvy = "0.15"
+
+# Rust-analyzer configuration
+[workspace.metadata.rust-analyzer]
+cargo.features = "all"
 
 # Build profiles
 [profile.maxperf]

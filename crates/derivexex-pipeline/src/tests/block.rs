@@ -38,7 +38,7 @@ fn mock_deposit() -> DepositedTransaction {
 
 #[test]
 fn test_build_first_block_with_deposits() {
-    let mut builder = L2BlockBuilder::new(Hardfork::Ecotone, 1000);
+    let mut builder = L2BlockBuilder::new(Hardfork::Ecotone);
     builder.set_l1_origin(mock_l1_origin());
     builder.add_deposits([mock_deposit(), mock_deposit()]);
 
@@ -47,7 +47,7 @@ fn test_build_first_block_with_deposits() {
 
     let block = builder.build_block(1700000002, &l1_info, sequencer_txs).unwrap();
 
-    assert_eq!(block.number, 1000);
+    assert_eq!(block.number, 0); // Starts at 0
     assert_eq!(block.timestamp, 1700000002);
     assert_eq!(block.sequence_number, 0);
     assert!(block.is_epoch_start());
@@ -60,7 +60,7 @@ fn test_build_first_block_with_deposits() {
 
 #[test]
 fn test_subsequent_blocks_no_deposits() {
-    let mut builder = L2BlockBuilder::new(Hardfork::Ecotone, 1000);
+    let mut builder = L2BlockBuilder::new(Hardfork::Ecotone);
     builder.set_l1_origin(mock_l1_origin());
     builder.add_deposits([mock_deposit()]);
 
@@ -77,7 +77,7 @@ fn test_subsequent_blocks_no_deposits() {
 
 #[test]
 fn test_new_epoch_resets_sequence_number() {
-    let mut builder = L2BlockBuilder::new(Hardfork::Ecotone, 1000);
+    let mut builder = L2BlockBuilder::new(Hardfork::Ecotone);
 
     // First epoch
     builder.set_l1_origin(mock_l1_origin());
@@ -100,35 +100,52 @@ fn test_new_epoch_resets_sequence_number() {
 
 #[test]
 fn test_error_without_l1_origin() {
-    let mut builder = L2BlockBuilder::new(Hardfork::Ecotone, 1000);
+    let mut builder = L2BlockBuilder::new(Hardfork::Ecotone);
 
     let result = builder.build_block(1700000002, &mock_l1_info(0), vec![]);
     assert!(matches!(result, Err(BlockBuildError::NoL1Origin)));
 }
 
 #[test]
-fn test_block_number_advances() {
-    let mut builder = L2BlockBuilder::new(Hardfork::Ecotone, 5000);
+fn test_block_number_starts_at_zero() {
+    let mut builder = L2BlockBuilder::new(Hardfork::Ecotone);
+    builder.set_l1_origin(mock_l1_origin());
+
+    assert_eq!(builder.current_block_number(), 0);
+
+    let block1 = builder.build_block(1700000001, &mock_l1_info(0), vec![]).unwrap();
+    assert_eq!(block1.number, 0);
+    assert_eq!(builder.current_block_number(), 1);
+
+    let block2 = builder.build_block(1700000002, &mock_l1_info(1), vec![]).unwrap();
+    assert_eq!(block2.number, 1);
+    assert_eq!(builder.current_block_number(), 2);
+}
+
+#[test]
+fn test_set_block_number_for_resume() {
+    let mut builder = L2BlockBuilder::new(Hardfork::Ecotone);
+    builder.set_block_number(5000); // Resume from checkpoint
     builder.set_l1_origin(mock_l1_origin());
 
     assert_eq!(builder.current_block_number(), 5000);
 
-    let block1 = builder.build_block(1, &mock_l1_info(0), vec![]).unwrap();
+    let block1 = builder.build_block(1700000001, &mock_l1_info(0), vec![]).unwrap();
     assert_eq!(block1.number, 5000);
     assert_eq!(builder.current_block_number(), 5001);
 
-    let block2 = builder.build_block(2, &mock_l1_info(1), vec![]).unwrap();
+    let block2 = builder.build_block(1700000002, &mock_l1_info(1), vec![]).unwrap();
     assert_eq!(block2.number, 5001);
     assert_eq!(builder.current_block_number(), 5002);
 }
 
 #[test]
 fn test_l1_origin_in_block() {
-    let mut builder = L2BlockBuilder::new(Hardfork::Ecotone, 1000);
+    let mut builder = L2BlockBuilder::new(Hardfork::Ecotone);
     let origin = mock_l1_origin();
     builder.set_l1_origin(origin.clone());
 
-    let block = builder.build_block(1, &mock_l1_info(0), vec![]).unwrap();
+    let block = builder.build_block(1700000001, &mock_l1_info(0), vec![]).unwrap();
 
     assert_eq!(block.l1_origin.number, origin.number);
     assert_eq!(block.l1_origin.hash, origin.hash);

@@ -190,7 +190,7 @@ async fn test_full_l2_block_building() -> Result<()> {
         l2_genesis_time: L2_GENESIS_TIME,
         l2_block_time: L2_BLOCK_TIME,
     };
-    let mut deriver = Deriver::new(deriver_config, starting_l2_block);
+    let mut deriver = Deriver::new(deriver_config);
 
     // Step 3: Register real L1 epoch info for the blocks referenced in the span batch.
     // These are real L1 block hashes and fees fetched from Ethereum mainnet.
