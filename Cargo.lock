@@ -2860,6 +2860,7 @@ dependencies = [
  "derivexex-pipeline",
  "futures",
  "hex",
+ "op-alloy-consensus",
  "reqwest",
  "schnellru",
  "serde",

@@ -23,18 +23,22 @@ pub mod l1_info;
 mod tests;
 
 // High-level
+pub use block::{BlockBuildError, L1BlockRef, L2Block, L2BlockBuilder, L2Transaction};
 pub use derive::{ChannelResult, DeriveError, Deriver, DeriverConfig, EpochInfo};
-pub use block::{L1BlockRef, L2Block, L2BlockBuilder, L2Transaction, BlockBuildError};
 
 // Pipeline stages
-pub use frame::{ChannelFrame, FrameDecoder, FrameError};
-pub use channel::{Channel, ChannelAssembler, ChannelError};
 pub use batch::{Batch, BatchError, SingleBatch, SpanBatch, SpanBatchElement};
+pub use channel::{Channel, ChannelAssembler, ChannelError};
+pub use frame::{ChannelFrame, FrameDecoder, FrameError};
 
 // Deposits & L1 info
-pub use deposits::{DepositedTransaction, DepositError, DEPOSIT_TX_TYPE, TRANSACTION_DEPOSITED_TOPIC};
-pub use l1_info::{L1BlockInfo, Hardfork, L1_BLOCK_ADDRESS, L1_ATTRIBUTES_DEPOSITOR, L1_INFO_TX_GAS};
-pub use l1_info::{compute_l1_info_source_hash, ECOTONE_L1_INFO_TX_CALLDATA_LEN, ISTHMUS_L1_INFO_TX_CALLDATA_LEN};
+pub use deposits::{
+    DepositError, DepositedTransaction, DEPOSIT_TX_TYPE, TRANSACTION_DEPOSITED_TOPIC,
+};
+pub use l1_info::{
+    compute_l1_info_source_hash, Hardfork, L1BlockInfo, ECOTONE_L1_INFO_TX_CALLDATA_LEN,
+    ISTHMUS_L1_INFO_TX_CALLDATA_LEN, L1_ATTRIBUTES_DEPOSITOR, L1_BLOCK_ADDRESS, L1_INFO_TX_GAS,
+};
 
 // Re-exports for convenience
 pub use alloy_eips::eip4844::Blob;
@@ -165,7 +169,7 @@ pub const fn max_blob_data_size() -> usize {
 /// let txs = decode_blobs_to_transactions(&blobs)?;
 /// ```
 pub fn decode_blobs_to_transactions(blobs: &[Blob]) -> Result<Vec<Bytes>, DeriveError> {
-    use alloy_rlp::{Decodable, bytes::Bytes as RlpBytes};
+    use alloy_rlp::{bytes::Bytes as RlpBytes, Decodable};
 
     let mut assembler = ChannelAssembler::new();
 

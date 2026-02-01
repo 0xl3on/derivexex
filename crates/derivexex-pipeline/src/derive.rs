@@ -74,6 +74,12 @@ impl Deriver {
         self.block_builder.set_block_number(block_number);
     }
 
+    /// Get the current L2 block number.
+    #[inline]
+    pub fn current_block_number(&self) -> u64 {
+        self.block_builder.current_block_number()
+    }
+
     /// Register L1 block info for an epoch.
     #[inline]
     pub fn register_epoch(&mut self, l1_block_number: u64, info: EpochInfo) {
@@ -94,12 +100,6 @@ impl Deriver {
         deposits: impl IntoIterator<Item = DepositedTransaction>,
     ) {
         self.epoch_deposits.entry(l1_block_number).or_default().extend(deposits);
-    }
-
-    /// Get the current L2 block number.
-    #[inline]
-    pub fn current_block_number(&self) -> u64 {
-        self.block_builder.current_block_number()
     }
 
     /// Clear all epoch data (info and deposits) for L1 blocks >= first_invalid_block.

@@ -33,7 +33,6 @@ pub struct DerivationCheckpoint {
     /// Last fully processed L1 block hash.
     pub l1_block_hash: [u8; 32],
     /// Next L2 block number to derive.
-    /// This is the actual block number, not a count.
     pub next_l2_block_number: u64,
     /// Number of L2 blocks derived so far (for stats).
     pub l2_blocks_derived: u64,

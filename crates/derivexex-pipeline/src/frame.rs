@@ -76,7 +76,10 @@ impl FrameDecoder {
         Ok(frames)
     }
 
-    fn decode_single_frame(data: &[u8], l1_origin: u64) -> Result<(ChannelFrame, usize), FrameError> {
+    fn decode_single_frame(
+        data: &[u8],
+        l1_origin: u64,
+    ) -> Result<(ChannelFrame, usize), FrameError> {
         if data.len() < Self::MIN_FRAME_SIZE {
             return Err(FrameError::Incomplete);
         }

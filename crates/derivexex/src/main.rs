@@ -130,7 +130,11 @@ impl<B: BlobProvider> DerivationPipeline<B> {
         Ok(frames)
     }
 
-    fn decode_blob(&mut self, blob: &Blob, l1_block_number: u64) -> eyre::Result<Vec<ChannelFrame>> {
+    fn decode_blob(
+        &mut self,
+        blob: &Blob,
+        l1_block_number: u64,
+    ) -> eyre::Result<Vec<ChannelFrame>> {
         let len = decode_blob_data_into(blob, &mut self.blob_decode_buf);
         FrameDecoder::decode_frames(&self.blob_decode_buf[..len], l1_block_number)
             .map_err(|e| eyre::eyre!("Frame decode error: {}", e))
@@ -344,7 +348,8 @@ where
                     );
 
                     // fetch blobs and decode frames
-                    match pipeline.process_blobs(slot, batch.block_number, &batch.blob_hashes).await {
+                    match pipeline.process_blobs(slot, batch.block_number, &batch.blob_hashes).await
+                    {
                         Ok(frames) => {
                             tracker.blobs_fetched += batch.blob_count as u64;
                             tracker.frames_decoded += frames.len() as u64;

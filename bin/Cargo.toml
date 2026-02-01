@@ -1,0 +1,22 @@
+[package]
+name = "derivexex-streamer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "WebSocket server for streaming Unichain derivation events"
+
+[[bin]]
+name = "derivexex-streamer"
+path = "src/main.rs"
+
+[dependencies]
+derivexex-stream = { path = "../crates/derivexex-stream" }
+tokio = { workspace = true, features = ["full"] }
+axum = { version = "0.8", features = ["ws"] }
+tower-http = { version = "0.6", features = ["cors"] }
+futures = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+clap = { version = "4", features = ["derive", "env"] }

@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unichain Stream</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 500;
+            margin-bottom: 20px;
+            color: #fff;
+        }
+        .config {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .config input {
+            flex: 1;
+            min-width: 200px;
+            padding: 10px 14px;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 6px;
+            color: #fff;
+            font-family: inherit;
+            font-size: 0.875rem;
+        }
+        .config input:focus {
+            outline: none;
+            border-color: #666;
+        }
+        .config button {
+            padding: 10px 20px;
+            background: #2a2a2a;
+            border: 1px solid #444;
+            border-radius: 6px;
+            color: #fff;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 0.875rem;
+            transition: background 0.15s;
+        }
+        .config button:hover {
+            background: #3a3a3a;
+        }
+        .config button.connected {
+            background: #1a3a1a;
+            border-color: #2a5a2a;
+        }
+        .config button.error {
+            background: #3a1a1a;
+            border-color: #5a2a2a;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .stat {
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            border-radius: 8px;
+            padding: 16px;
+        }
+        .stat-label {
+            font-size: 0.75rem;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 4px;
+        }
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 500;
+            color: #fff;
+        }
+        .stat-value.unsafe { color: #f59e0b; }
+        .stat-value.safe { color: #10b981; }
+        .stat-value.finalized { color: #3b82f6; }
+        .events {
+            background: #111;
+            border: 1px solid #2a2a2a;
+            border-radius: 8px;
+            height: 500px;
+            overflow-y: auto;
+        }
+        .event {
+            padding: 12px 16px;
+            border-bottom: 1px solid #1a1a1a;
+            font-size: 0.8125rem;
+            line-height: 1.5;
+        }
+        .event:last-child {
+            border-bottom: none;
+        }
+        .event-type {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            margin-right: 8px;
+        }
+        .event-type.block { background: #1a2a1a; color: #4ade80; }
+        .event-type.reorg { background: #3a1a1a; color: #f87171; }
+        .event-type.head_update { background: #1a1a3a; color: #60a5fa; }
+        .event-type.connected { background: #2a2a1a; color: #fbbf24; }
+        .event-type.transaction { background: #2a1a2a; color: #c084fc; }
+        .event-time {
+            color: #666;
+            font-size: 0.75rem;
+        }
+        .event-data {
+            margin-top: 6px;
+            color: #aaa;
+            word-break: break-all;
+        }
+        .event-data code {
+            background: #1a1a1a;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.75rem;
+        }
+        .event-expand {
+            cursor: pointer;
+            user-select: none;
+        }
+        .event-expand:hover {
+            background: #1a1a1a;
+        }
+        .event-details {
+            display: none;
+            margin-top: 8px;
+            padding: 10px;
+            background: #0a0a0a;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            overflow-x: auto;
+        }
+        .event-details.open {
+            display: block;
+        }
+        .event-details pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .detail-row {
+            display: flex;
+            padding: 4px 0;
+            border-bottom: 1px solid #1a1a1a;
+        }
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+        .detail-label {
+            width: 100px;
+            flex-shrink: 0;
+            color: #666;
+        }
+        .detail-value {
+            flex: 1;
+            word-break: break-all;
+        }
+        .detail-value.hash {
+            font-family: monospace;
+            color: #60a5fa;
+        }
+        .detail-value.address {
+            font-family: monospace;
+            color: #4ade80;
+        }
+        .detail-value.input {
+            font-family: monospace;
+            color: #fbbf24;
+            max-height: 100px;
+            overflow-y: auto;
+        }
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #111;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #444;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Unichain Stream</h1>
+
+        <div class="config">
+            <input type="text" id="wsUrl" placeholder="WebSocket URL" value="ws://localhost:9944/ws">
+            <button id="connectBtn" onclick="toggleConnection()">Connect</button>
+            <button onclick="clearEvents()">Clear</button>
+        </div>
+
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-label">Status</div>
+                <div class="stat-value" id="status">Disconnected</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Blocks</div>
+                <div class="stat-value" id="blockCount">0</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Unsafe Head</div>
+                <div class="stat-value unsafe" id="unsafeHead">-</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Safe Head</div>
+                <div class="stat-value safe" id="safeHead">-</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Finalized</div>
+                <div class="stat-value finalized" id="finalizedHead">-</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Transactions</div>
+                <div class="stat-value" id="txCount">0</div>
+            </div>
+        </div>
+
+        <div class="events" id="events"></div>
+    </div>
+
+    <script>
+        let ws = null;
+        let blockCount = 0;
+        let txCount = 0;
+
+        function toggleConnection() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close();
+            } else {
+                connect();
+            }
+        }
+
+        function connect() {
+            const url = document.getElementById('wsUrl').value;
+            const btn = document.getElementById('connectBtn');
+
+            try {
+                ws = new WebSocket(url);
+
+                ws.onopen = () => {
+                    document.getElementById('status').textContent = 'Connected';
+                    btn.textContent = 'Disconnect';
+                    btn.classList.add('connected');
+                    btn.classList.remove('error');
+                };
+
+                ws.onclose = () => {
+                    document.getElementById('status').textContent = 'Disconnected';
+                    btn.textContent = 'Connect';
+                    btn.classList.remove('connected');
+                };
+
+                ws.onerror = () => {
+                    document.getElementById('status').textContent = 'Error';
+                    btn.classList.add('error');
+                    btn.classList.remove('connected');
+                };
+
+                ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        handleEvent(data);
+                    } catch (e) {
+                        console.error('Failed to parse:', event.data);
+                    }
+                };
+            } catch (e) {
+                console.error('Connection failed:', e);
+            }
+        }
+
+        function handleEvent(data) {
+            const type = data.type;
+
+            if (type === 'block') {
+                blockCount++;
+                document.getElementById('blockCount').textContent = blockCount;
+            } else if (type === 'head_update') {
+                document.getElementById('unsafeHead').textContent = data.unsafe_head?.toLocaleString() || '-';
+                document.getElementById('safeHead').textContent = data.safe_head?.toLocaleString() || '-';
+                document.getElementById('finalizedHead').textContent = data.finalized_head?.toLocaleString() || '-';
+            } else if (type === 'transaction') {
+                txCount++;
+                document.getElementById('txCount').textContent = txCount;
+            }
+
+            addEventToLog(type, data);
+        }
+
+        function addEventToLog(type, data) {
+            const events = document.getElementById('events');
+            const div = document.createElement('div');
+            div.className = 'event';
+
+            const time = new Date().toLocaleTimeString();
+            let details = '';
+            let expandable = null;
+
+            if (type === 'block') {
+                details = `L2 #<code>${data.number?.toLocaleString()}</code> | L1 origin: <code>${data.l1_origin?.number}</code> | Txs: <code>${data.transactions?.length || 0}</code>`;
+            } else if (type === 'reorg') {
+                details = `Depth: <code>${data.depth}</code> | First invalid: <code>${data.first_invalid}</code>`;
+            } else if (type === 'head_update') {
+                details = `Unsafe: <code>${data.unsafe_head}</code> | Safe: <code>${data.safe_head}</code> | Finalized: <code>${data.finalized_head}</code>`;
+            } else if (type === 'connected') {
+                details = data.message || 'Connected';
+            } else if (type === 'transaction') {
+                const tx = data.data;
+                const toAddr = tx.to ? tx.to.slice(0, 10) + '...' : 'CREATE';
+                const fromAddr = tx.from?.slice(0, 10) + '...' || '?';
+                const inputPreview = tx.input?.slice(0, 10) || '0x';
+                details = `<code>${tx.hash?.slice(0, 14)}...</code> | ${fromAddr} → ${toAddr} | Method: <code>${inputPreview}</code> ▼`;
+                expandable = buildTxDetails(tx);
+            } else {
+                details = `<code>${JSON.stringify(data).slice(0, 200)}</code>`;
+            }
+
+            const id = 'evt-' + Date.now() + Math.random().toString(36).slice(2);
+            const expandClass = expandable ? 'event-expand' : '';
+            const onClick = expandable ? `onclick="toggleDetails('${id}')"` : '';
+
+            div.innerHTML = `
+                <div class="${expandClass}" ${onClick}>
+                    <span class="event-type ${type}">${type}</span>
+                    <span class="event-time">${time}</span>
+                    <div class="event-data">${details}</div>
+                </div>
+                ${expandable ? `<div class="event-details" id="${id}">${expandable}</div>` : ''}
+            `;
+
+            events.insertBefore(div, events.firstChild);
+
+            // Keep only last 500 events
+            while (events.children.length > 500) {
+                events.removeChild(events.lastChild);
+            }
+        }
+
+        function buildTxDetails(tx) {
+            return `
+                <div class="detail-row">
+                    <span class="detail-label">Hash</span>
+                    <span class="detail-value hash">${tx.hash || '-'}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">From</span>
+                    <span class="detail-value address">${tx.from || '-'}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">To</span>
+                    <span class="detail-value address">${tx.to || 'Contract Creation'}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Value</span>
+                    <span class="detail-value">${tx.value || '0'}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Type</span>
+                    <span class="detail-value">${tx.tx_type} ${tx.is_deposit ? '(deposit)' : ''}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Nonce</span>
+                    <span class="detail-value">${tx.nonce}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Gas Limit</span>
+                    <span class="detail-value">${tx.gas_limit?.toLocaleString() || '-'}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">L2 Block</span>
+                    <span class="detail-value">${tx.l2_block_number?.toLocaleString() || '-'}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">L1 Origin</span>
+                    <span class="detail-value">${tx.l1_origin_number?.toLocaleString() || '-'}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Input</span>
+                    <span class="detail-value input">${tx.input || '0x'}</span>
+                </div>
+            `;
+        }
+
+        function toggleDetails(id) {
+            const el = document.getElementById(id);
+            if (el) {
+                el.classList.toggle('open');
+            }
+        }
+
+        function clearEvents() {
+            document.getElementById('events').innerHTML = '';
+            blockCount = 0;
+            txCount = 0;
+            document.getElementById('blockCount').textContent = '0';
+            document.getElementById('txCount').textContent = '0';
+        }
+    </script>
+</body>
+</html>
