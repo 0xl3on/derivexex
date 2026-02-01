@@ -44,18 +44,36 @@ Blobs are fetched from the Beacon API (consensus layer), since only Blob Version
 Implements the OP v0 blob encoding.
 
 ### Channel Assembly
-Channels are formed of frames  that are grouped by their 16-byte channel ID and reassembled in order. A channel is complete when `is_last` flag is set and all prior frames (0 to N) have arrived.
+Channels are formed of frames that are grouped by their 16-byte channel ID and reassembled in order. A channel is complete when `is_last` flag is set and all prior frames (0 to N) have arrived.
 
 ### Batch Decoding
 Handles both batch types from the OP Stack spec, logic derived from Kona's repo:
 - **Single Batch**
 - **Span Batch**: Introduced later, more efficient since it has more data packed.
 
+### Deposit Transactions
+Parses `TransactionDeposited` events from the OptimismPortal contract. Deposits are included in the first L2 block of each epoch.
+
+### L1 Attributes
+Builds the L1 attributes deposit transaction (the system tx that goes first in every L2 block). Supports both Ecotone and Isthmus hardfork formats.
+
+### L2 Block Building
+Assembles complete L2 blocks: L1 info deposit first, then user deposits (if epoch start), then sequencer transactions from batches.
+
+### Transaction Decoding
+Decodes all transaction types (legacy, EIP-2930, EIP-1559, EIP-7702, deposits) using `op-alloy-consensus`. Recovers signer addresses from signatures.
+
+### Reorg Handling
+Detects L1 reorgs and prunes invalidated frames, channels, and epoch data. The stream crate emits reorg events so consumers can react.
+
+### Head Tracking
+Tracks safe and finalized L1 heads (stream crate). Useful for knowing when derived L2 blocks are considered safe vs finalized.
+
 ### Persistence
-SQLite in memory and on disk using rusqlite.
+SQLite for checkpoints and recovery. Saves progress so you can resume after restart without re-deriving everything.
 
 ### What's Not Implemented
-Deposit transactions, L2 block attribute derivation, safe head tracking, full reorg handling, epoch validation, and metrics. We extract L2 transactions but don't build complete L2 blocks yet (this README will be updated along features implementation).
+Epoch validation (verifying timestamps match the spec), metrics/observability, and actual state execution (we build L2 blocks but don't run them through the EVM).
 
 ## What is an ExEx?
 
