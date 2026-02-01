@@ -35,3 +35,10 @@ pub const DEFAULT_L1_WS_URL: &str = "wss://eth.llamarpc.com";
 
 /// Default Beacon API URL.
 pub const DEFAULT_BEACON_URL: &str = "https://ethereum-beacon-api.publicnode.com";
+
+/// Beacon chain genesis timestamp (Dec 1, 2020 12:00:23 PM UTC).
+/// Used to compute slot numbers from block timestamps.
+pub const BEACON_GENESIS_TIME: u64 = 1606824023;
+
+/// Beacon chain slot duration in seconds.
+pub const SECONDS_PER_SLOT: u64 = 12;

@@ -79,19 +79,19 @@ impl L1Fetcher {
         })
     }
 
-    /// Fetch multiple L1 blocks in a range.
-    pub async fn get_block_range(
-        &self,
-        start: u64,
-        end: u64,
-    ) -> Result<Vec<EpochInfo>, PipelineError> {
-        let mut epochs = Vec::with_capacity((end - start + 1) as usize);
-        for block_num in start..=end {
-            let info = self.get_block_info(block_num).await?;
-            epochs.push(info);
-        }
-        Ok(epochs)
-    }
+    // /// Fetch multiple L1 blocks in a range.
+    // pub async fn get_block_range(
+    //     &self,
+    //     start: u64,
+    //     end: u64,
+    // ) -> Result<Vec<EpochInfo>, PipelineError> {
+    //     let mut epochs = Vec::with_capacity((end - start + 1) as usize);
+    //     for block_num in start..=end {
+    //         let info = self.get_block_info(block_num).await?;
+    //         epochs.push(info);
+    //     }
+    //     Ok(epochs)
+    // }
 }
 
 /// Calculate blob base fee from excess blob gas (EIP-4844).

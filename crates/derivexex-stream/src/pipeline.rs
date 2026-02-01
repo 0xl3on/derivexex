@@ -9,8 +9,8 @@ use tokio::sync::{broadcast, mpsc, RwLock};
 
 use derivexex_pipeline::{
     config::{
-        BASE_FEE_SCALAR, BATCHER, BLOB_BASE_FEE_SCALAR, DEFAULT_BEACON_URL, DEFAULT_L1_WS_URL,
-        L2_BLOCK_TIME, L2_GENESIS_TIME,
+        BASE_FEE_SCALAR, BATCHER, BEACON_GENESIS_TIME, BLOB_BASE_FEE_SCALAR, DEFAULT_BEACON_URL,
+        DEFAULT_L1_WS_URL, L2_BLOCK_TIME, L2_GENESIS_TIME, SECONDS_PER_SLOT,
     },
     decode_blob_data,
     l1_info::Hardfork,
@@ -63,6 +63,7 @@ pub struct UnichainPipelineConfig {
     blob_cache_capacity: u32,
 
     /// Reorg detection depth.
+    /// 64 because its when blocks reach finality
     #[builder(default = 64)]
     reorg_depth: usize,
 }
@@ -277,9 +278,6 @@ impl UnichainPipeline {
                     }
 
                     // Compute slot from block timestamp
-                    // Beacon chain genesis: Dec 1, 2020 12:00:23 PM UTC
-                    const BEACON_GENESIS_TIME: u64 = 1606824023;
-                    const SECONDS_PER_SLOT: u64 = 12;
                     let slot = batch.block_timestamp.saturating_sub(BEACON_GENESIS_TIME) /
                         SECONDS_PER_SLOT;
 

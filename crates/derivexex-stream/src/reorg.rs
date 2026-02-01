@@ -105,6 +105,7 @@ impl ReorgDetector {
     }
 
     /// Get the latest block number being tracked.
+    #[allow(dead_code)]
     pub fn latest_block(&self) -> Option<u64> {
         self.recent_blocks.back().map(|b| b.number)
     }

@@ -4,6 +4,7 @@ A minimal Rollup Derivation Pipeline built using Reth's ExEx.
 ## Table of Contents
 
 - [Motivation](#motivation)
+- [Crates](#crates)
 - [Implementation Status](#implementation-status)
 - [What is an ExEx?](#what-is-an-exex)
 - [What are Ethereum Blobs?](#what-are-ethereum-blobs)
@@ -20,6 +21,17 @@ A minimal Rollup Derivation Pipeline built using Reth's ExEx.
 
 Inspired by [this](https://www.paradigm.xyz/2024/05/reth-exex) great Paradigm article, I've decided to build this minimal Rollup Derivation Pipeline specifically for [Unichain](https://www.unichain.org/), even though it can be easily abstracted to be usable across other op-stack L2's. This is merely for fun and should not be used in prd!
 
+## Crates
+
+The project is split into a few crates:
+
+- **derivexex** - The ExEx binary. Runs alongside Reth, listens for new L1 blocks, fetches blobs from the beacon node, and pipes everything through the pipeline. Also handles persistence (SQLite) and reorg recovery.
+
+- **derivexex-pipeline** - Where the actual derivation happens. Blob decoding, frame parsing, channel assembly, batch decoding (both single and span batches), L2 block building. All sync code, no networking - just give it data and it spits out L2 blocks.
+
+- **derivexex-stream** - Standalone async version that doesn't need Reth. Subscribes to L1 via WebSocket, fetches blobs, tracks safe/finalized heads, detects reorgs. Useful if you just want to stream L2 blocks posted to Mainnet without running a full node.
+
+- **derivexex-types** - Shared types for serialization (channel state, checkpoints). Kept separate so the other crates don't have circular deps.
 
 ## Implementation Status
 
