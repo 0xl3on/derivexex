@@ -20,6 +20,8 @@ pub struct ChannelFrame {
     pub frame_number: u16,
     pub frame_data: Vec<u8>,
     pub is_last: bool,
+    /// L1 block number where this frame was included.
+    pub l1_origin: u64,
 }
 
 /// as mentioned in the README, blobs contains frames that later will be assembled into channels.
@@ -36,7 +38,12 @@ impl FrameDecoder {
     const FRAME_DATA_OFFSET: usize = 22;
     const MIN_FRAME_SIZE: usize = 23; // 16 + 2 + 4 + 0 + 1 (empty frame_data)
 
-    pub fn decode_frames(data: &[u8]) -> Result<Vec<ChannelFrame>, FrameError> {
+    /// Decode frames from blob data.
+    ///
+    /// # Arguments
+    /// * `data` - Raw blob data
+    /// * `l1_origin` - L1 block number where this blob was included
+    pub fn decode_frames(data: &[u8], l1_origin: u64) -> Result<Vec<ChannelFrame>, FrameError> {
         if data.is_empty() {
             return Ok(Vec::new());
         }
@@ -54,7 +61,7 @@ impl FrameDecoder {
                 break;
             }
 
-            match Self::decode_single_frame(remaining) {
+            match Self::decode_single_frame(remaining, l1_origin) {
                 Ok((frame, consumed)) => {
                     frames.push(frame);
                     offset += consumed;
@@ -69,7 +76,7 @@ impl FrameDecoder {
         Ok(frames)
     }
 
-    fn decode_single_frame(data: &[u8]) -> Result<(ChannelFrame, usize), FrameError> {
+    fn decode_single_frame(data: &[u8], l1_origin: u64) -> Result<(ChannelFrame, usize), FrameError> {
         if data.len() < Self::MIN_FRAME_SIZE {
             return Err(FrameError::Incomplete);
         }
@@ -94,6 +101,6 @@ impl FrameDecoder {
         let frame_data = data[Self::FRAME_DATA_OFFSET..is_last_offset].to_vec();
         let is_last = data[is_last_offset] == 1;
 
-        Ok((ChannelFrame { channel_id, frame_number, frame_data, is_last }, total_size))
+        Ok((ChannelFrame { channel_id, frame_number, frame_data, is_last, l1_origin }, total_size))
     }
 }

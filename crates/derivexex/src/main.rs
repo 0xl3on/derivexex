@@ -37,6 +37,7 @@ struct DerivationTracker {
 #[derive(Debug, Clone)]
 struct BatchTransaction {
     pub tx_hash: B256,
+    pub block_number: u64,
     pub block_timestamp: u64,
     pub blob_count: usize,
     pub blob_hashes: Vec<B256>,
@@ -105,6 +106,7 @@ impl<B: BlobProvider> DerivationPipeline<B> {
     async fn process_blobs(
         &mut self,
         slot: u64,
+        l1_block_number: u64,
         blob_hashes: &[B256],
     ) -> eyre::Result<Vec<ChannelFrame>> {
         let mut frames = Vec::new();
@@ -112,7 +114,7 @@ impl<B: BlobProvider> DerivationPipeline<B> {
         for hash in blob_hashes {
             match self.blob_provider.get_blob(slot, *hash).await {
                 Ok(blob) => {
-                    let blob_frames = self.decode_blob(&blob)?;
+                    let blob_frames = self.decode_blob(&blob, l1_block_number)?;
                     frames.extend(blob_frames);
                 }
                 Err(e) => {
@@ -128,9 +130,9 @@ impl<B: BlobProvider> DerivationPipeline<B> {
         Ok(frames)
     }
 
-    fn decode_blob(&mut self, blob: &Blob) -> eyre::Result<Vec<ChannelFrame>> {
+    fn decode_blob(&mut self, blob: &Blob, l1_block_number: u64) -> eyre::Result<Vec<ChannelFrame>> {
         let len = decode_blob_data_into(blob, &mut self.blob_decode_buf);
-        FrameDecoder::decode_frames(&self.blob_decode_buf[..len])
+        FrameDecoder::decode_frames(&self.blob_decode_buf[..len], l1_block_number)
             .map_err(|e| eyre::eyre!("Frame decode error: {}", e))
     }
 
@@ -139,9 +141,9 @@ impl<B: BlobProvider> DerivationPipeline<B> {
         self.assembler.take_complete()
     }
 
-    /// Handle L1 reorg by clearing stale in-memory state.
+    /// Handle L1 reorg by selectively pruning invalidated frames and epochs.
     fn handle_reorg(&mut self, first_invalid_block: u64) {
-        self.assembler.clear();
+        self.assembler.remove_frames_from(first_invalid_block);
         self.deriver.clear_epochs_from(first_invalid_block);
     }
 }
@@ -301,6 +303,7 @@ where
                 let batch_txs: Vec<BatchTransaction> = chain
                     .blocks_iter()
                     .flat_map(|block| {
+                        let block_number = block.number();
                         let block_timestamp = block.timestamp();
 
                         block.transactions_with_sender().filter_map(move |(sender, tx)| {
@@ -315,6 +318,7 @@ where
 
                             Some(BatchTransaction {
                                 tx_hash: *tx.tx_hash(),
+                                block_number,
                                 block_timestamp,
                                 blob_count: blob_hashes.len(),
                                 blob_hashes,
@@ -340,7 +344,7 @@ where
                     );
 
                     // fetch blobs and decode frames
-                    match pipeline.process_blobs(slot, &batch.blob_hashes).await {
+                    match pipeline.process_blobs(slot, batch.block_number, &batch.blob_hashes).await {
                         Ok(frames) => {
                             tracker.blobs_fetched += batch.blob_count as u64;
                             tracker.frames_decoded += frames.len() as u64;

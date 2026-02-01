@@ -171,7 +171,8 @@ pub fn decode_blobs_to_transactions(blobs: &[Blob]) -> Result<Vec<Bytes>, Derive
 
     for blob in blobs {
         let data = decode_blob_data(blob);
-        let frames = FrameDecoder::decode_frames(&data)?;
+        // L1 origin not needed for this helper - just extracting transactions
+        let frames = FrameDecoder::decode_frames(&data, 0)?;
         for frame in frames {
             assembler.add_frame(frame);
         }

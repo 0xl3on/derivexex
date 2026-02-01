@@ -44,7 +44,7 @@ async fn test_frame_decoder_with_real_blobs() -> Result<()> {
             continue;
         }
 
-        let frames = match FrameDecoder::decode_frames(&data) {
+        let frames = match FrameDecoder::decode_frames(&data, 0) {
             Ok(f) => f,
             Err(_) => continue,
         };
@@ -168,7 +168,7 @@ async fn test_full_l2_block_building() -> Result<()> {
             continue;
         }
 
-        if let Ok(frames) = FrameDecoder::decode_frames(&data) {
+        if let Ok(frames) = FrameDecoder::decode_frames(&data, 0) {
             for frame in frames {
                 assembler.add_frame(frame);
             }

@@ -95,6 +95,23 @@ impl PendingChannel {
         self.frames.insert(frame.frame_number, frame);
     }
 
+    /// Remove frames from L1 blocks >= first_invalid.
+    /// Returns true if any frames were removed.
+    fn remove_frames_from(&mut self, first_invalid: u64) -> bool {
+        let before = self.frames.len();
+        self.frames.retain(|_, frame| frame.l1_origin < first_invalid);
+        let removed = self.frames.len() < before;
+
+        if removed {
+            // Recalculate highest_frame and is_closed after pruning
+            self.highest_frame = self.frames.keys().copied().max().unwrap_or(0);
+            // Check if we still have the last frame
+            self.is_closed = self.frames.values().any(|f| f.is_last);
+        }
+
+        removed
+    }
+
     #[inline]
     /// Optimized O(1) completeness check for a channel
     fn is_complete(&self) -> bool {
@@ -147,10 +164,23 @@ impl ChannelAssembler {
             .collect()
     }
 
-    /// Clear all pending channels. Call on L1 reorg.
+    /// Clear all pending channels.
     #[inline]
     pub fn clear(&mut self) {
         self.pending.clear();
+    }
+
+    /// Remove frames from L1 blocks >= first_invalid.
+    ///
+    /// Call this on L1 reorg to selectively prune only affected frames,
+    /// preserving channels that were complete before the reorg.
+    pub fn remove_frames_from(&mut self, first_invalid: u64) {
+        // Remove affected frames from each channel
+        for channel in self.pending.values_mut() {
+            channel.remove_frames_from(first_invalid);
+        }
+        // Remove channels that are now empty
+        self.pending.retain(|_, ch| !ch.frames.is_empty());
     }
 }
 
