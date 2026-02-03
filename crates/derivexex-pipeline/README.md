@@ -180,6 +180,7 @@ let l1_info = L1BlockInfo::new(
 let calldata = l1_info.to_calldata(Hardfork::Ecotone);
 
 // Or Isthmus (180 bytes, adds operator fees)
+// Note that Unichain doesn't use Isthmus as of Feb 2, 2026, but this was added since it has breaking changes specifically to the L1 info encoding
 let calldata = l1_info
     .with_operator_fees(scalar, constant)
     .to_calldata(Hardfork::Isthmus);
